@@ -670,126 +670,7 @@ function hdgBetween(a,b){
   return((Math.atan2(y,x)*180/Math.PI)+360)%360
 }
 
-// ── OpenSky Network API ──────────────────────────────────────────────
-// Free, no API key needed. Returns real live flights worldwide.
-// Docs: https://openskynetwork.github.io/opensky-api/rest.html
-const OPENSKY_URL = 'https://opensky-network.org/api/states/all'
-
-// OpenSky state vector indices
-const [O_ICAO,O_CALL,O_CC,O_TIME,O_LON,O_LAT,O_BALT,O_GND,O_SPD,O_HDG,O_VRATE,O_SQUAWK,O_SPI,O_POS,O_GALT] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]
-
-// Guess airline from callsign prefix (first 3 chars = ICAO airline code)
-function guessAirline(callsign){
-  if(!callsign) return {iata:'??',name:'Unknown',cc:'UN'}
-  const prefix = callsign.trim().slice(0,3).toUpperCase()
-  // Common ICAO → airline mapping
-  const map = {
-    'BAW':{iata:'BA',name:'British Airways',cc:'GB'},
-    'UAL':{iata:'UA',name:'United Airlines',cc:'US'},
-    'DAL':{iata:'DL',name:'Delta Air Lines',cc:'US'},
-    'AAL':{iata:'AA',name:'American Airlines',cc:'US'},
-    'DLH':{iata:'LH',name:'Lufthansa',cc:'DE'},
-    'AFR':{iata:'AF',name:'Air France',cc:'FR'},
-    'UAE':{iata:'EK',name:'Emirates',cc:'AE'},
-    'SIA':{iata:'SQ',name:'Singapore Airlines',cc:'SG'},
-    'QFA':{iata:'QF',name:'Qantas',cc:'AU'},
-    'CPA':{iata:'CX',name:'Cathay Pacific',cc:'HK'},
-    'JAL':{iata:'JL',name:'Japan Airlines',cc:'JP'},
-    'THY':{iata:'TK',name:'Turkish Airlines',cc:'TR'},
-    'RYR':{iata:'FR',name:'Ryanair',cc:'IE'},
-    'EZY':{iata:'U2',name:'easyJet',cc:'GB'},
-    'KLM':{iata:'KL',name:'KLM',cc:'NL'},
-    'IBE':{iata:'IB',name:'Iberia',cc:'ES'},
-    'SWR':{iata:'LX',name:'SWISS',cc:'CH'},
-    'AUA':{iata:'OS',name:'Austrian Airlines',cc:'AT'},
-    'BEL':{iata:'SN',name:'Brussels Airlines',cc:'BE'},
-    'VLG':{iata:'VY',name:'Vueling',cc:'ES'},
-    'AZA':{iata:'AZ',name:'ITA Airways',cc:'IT'},
-    'SAS':{iata:'SK',name:'SAS',cc:'SE'},
-    'FIN':{iata:'AY',name:'Finnair',cc:'FI'},
-    'WZZ':{iata:'W6',name:'Wizz Air',cc:'HU'},
-    'NOZ':{iata:'D8',name:'Norwegian',cc:'NO'},
-    'TAP':{iata:'TP',name:'TAP Air Portugal',cc:'PT'},
-    'CSN':{iata:'CZ',name:'China Southern',cc:'CN'},
-    'CCA':{iata:'CA',name:'Air China',cc:'CN'},
-    'CES':{iata:'MU',name:'China Eastern',cc:'CN'},
-    'ANA':{iata:'NH',name:'ANA',cc:'JP'},
-    'AAR':{iata:'OZ',name:'Asiana Airlines',cc:'KR'},
-    'KAL':{iata:'KE',name:'Korean Air',cc:'KR'},
-    'SVA':{iata:'SV',name:'Saudia',cc:'SA'},
-    'ETH':{iata:'ET',name:'Ethiopian Airlines',cc:'ET'},
-    'MSR':{iata:'MS',name:'EgyptAir',cc:'EG'},
-    'RAM':{iata:'AT',name:'Royal Air Maroc',cc:'MA'},
-    'UAB':{iata:'B2',name:'Belavia',cc:'BY'},
-    'FDX':{iata:'FX',name:'FedEx',cc:'US'},
-    'UPS':{iata:'5X',name:'UPS Airlines',cc:'US'},
-    'GTI':{iata:'GT',name:'Atlas Air',cc:'US'},
-    'AMX':{iata:'AM',name:'Aeromexico',cc:'MX'},
-    'AVA':{iata:'AV',name:'Avianca',cc:'CO'},
-    'LAN':{iata:'LA',name:'LATAM',cc:'CL'},
-    'GLO':{iata:'G3',name:'Gol',cc:'BR'},
-    'TAM':{iata:'JJ',name:'LATAM Brasil',cc:'BR'},
-    'QTR':{iata:'QR',name:'Qatar Airways',cc:'QA'},
-    'GFA':{iata:'GF',name:'Gulf Air',cc:'BH'},
-    'ETD':{iata:'EY',name:'Etihad Airways',cc:'AE'},
-    'OAL':{iata:'OA',name:'Olympic Air',cc:'GR'},
-    'TOM':{iata:'BY',name:'TUI Airways',cc:'GB'},
-    'EXS':{iata:'LS',name:'Jet2',cc:'GB'},
-    'TCX':{iata:'MT',name:'TUI fly',cc:'BE'},
-  }
-  return map[prefix] || {iata:prefix, name:callsign.trim(), cc:'UN'}
-}
-
-// Convert OpenSky state vector to our flight object
-function openskyToFlight(state){
-  const icao24 = state[O_ICAO]
-  const callsign = (state[O_CALL]||'').trim()
-  const cc = state[O_CC] || 'UN'
-  const lon = state[O_LON]
-  const lat = state[O_LAT]
-  const balt = state[O_BALT] // barometric altitude in metres
-  const onGround = state[O_GND]
-  const spd = state[O_SPD]   // m/s
-  const hdg = state[O_HDG]   // degrees
-  const vrate = state[O_VRATE] // m/s
-
-  if(!lat || !lon || onGround) return null // skip ground aircraft & missing pos
-
-  const altFt = balt ? Math.round(balt * 3.28084) : 0
-  const spdKts = spd ? Math.round(spd * 1.94384) : 0
-  const vrateFpm = vrate ? Math.round(vrate * 196.85) : 0
-  const airline = guessAirline(callsign)
-
-  // We don't get origin/dest from OpenSky free tier, so show what we have
-  const orig = {iata:'???', city:'Unknown', lon:0, lat:0, cc:'UN'}
-  const dest = {iata:'???', city:'Unknown', lon:0, lat:0, cc:'UN'}
-
-  return {
-    id: icao24,
-    callsign: callsign || icao24,
-    reg: icao24.toUpperCase(),
-    icao24: icao24.toUpperCase(),
-    airline,
-    acType: {icao:'N/A', name:'Unknown type'},
-    orig, dest,
-    lat, lon,
-    hdg: hdg || 0,
-    alt: altFt,
-    spd: spdKts,
-    vrate: vrateFpm,
-    squawk: state[O_SQUAWK] || '0000',
-    progress: 50, // unknown without route data
-    status: 'enroute',
-    eta: null,
-    distNm: null,
-    age: null,
-    weather: null,
-    countryCode: cc,
-  }
-}
-
-// ── Fallback mock generator (used if OpenSky fails) ───────────────────
-function generateMockFlights(n=200){
+function generateFlights(n=180){
   return Array.from({length:n},(_,i)=>{
     const al=pick(AIRLINES), ac=pick(AC_TYPES)
     const orig=pick(AIRPORTS); let dest=pick(AIRPORTS); while(dest===orig)dest=pick(AIRPORTS)
@@ -798,98 +679,31 @@ function generateMockFlights(n=200){
     const lon=orig.lon+(dest.lon-orig.lon)*prog + rand(-2,2)
     const hdg=hdgBetween({lat,lon},{lat:dest.lat,lon:dest.lon})
     const alt=randi(28000,42000), spd=randi(420,560)
+    const statuses=['enroute','enroute','enroute','boarding','delayed','approaching']
     return {
-      id:`mock-${i}`, callsign:`${al.iata}${randi(100,9999)}`, reg:`G-XXXX`,
+      id:`f${i}`, callsign:`${al.iata}${randi(100,9999)}`, reg:`G-${String.fromCharCode(65+randi(0,26))}${String.fromCharCode(65+randi(0,26))}${String.fromCharCode(65+randi(0,26))}${String.fromCharCode(65+randi(0,26))}`,
       icao24:Math.random().toString(16).slice(2,8).toUpperCase(),
       airline:al, acType:ac, orig, dest, lat, lon, hdg, alt, spd,
       vrate:rand(-800,800), squawk:String(randi(1000,7777)),
-      progress:Math.round(prog*100), status:'enroute',
+      progress:Math.round(prog*100), status:pick(statuses),
       eta:new Date(Date.now()+rand(20,360)*60000).toISOString(),
       distNm:Math.round(rand(50,3500)), age:randi(1,18),
       weather:{temp:randi(-55,5), desc:pick(['Clear','Partly cloudy','Overcast']), wind:randi(10,55), windDir:randi(0,360)},
-      countryCode: al.cc,
     }
   })
 }
 
-let flights = []
-let usingMock = false
-let fetchInterval = null
+let flights = generateFlights()
 
-// ── Fetch from OpenSky ────────────────────────────────────────────────
-async function fetchOpenSky(){
-  setLoadingStatus('Fetching live flights…')
-  try {
-    const res = await fetch(OPENSKY_URL, {
-      headers: {'Accept':'application/json'},
-      signal: AbortSignal.timeout(12000)
-    })
-
-    if(res.status === 429){
-      // Rate limited — keep existing flights, retry later
-      setLoadingStatus('Rate limited — retrying soon')
-      return
-    }
-    if(!res.ok) throw new Error(`HTTP ${res.status}`)
-
-    const data = await res.json()
-    const states = data.states || []
-
-    const parsed = states
-      .map(openskyToFlight)
-      .filter(Boolean)
-
-    if(parsed.length < 10) throw new Error('Too few results')
-
-    flights = parsed
-    usingMock = false
-    updateMarkers()
-    if(state.activeTab==='live') renderLiveList()
-    setLoadingStatus(null, parsed.length)
-
-  } catch(err) {
-    console.warn('OpenSky fetch failed:', err.message)
-    if(flights.length === 0){
-      // First load failed — fall back to mock
-      flights = generateMockFlights()
-      usingMock = true
-      updateMarkers()
-      if(state.activeTab==='live') renderLiveList()
-      setLoadingStatus(null, flights.length, true)
-    }
-  }
-}
-
-function setLoadingStatus(msg, count, isMock=false){
-  const el = document.getElementById('stat-count')
-  if(msg){
-    el.innerHTML = `<span style="color:var(--muted)">${msg}</span>`
-  } else if(isMock){
-    el.innerHTML = `<span style="color:var(--orange)" title="OpenSky unavailable — showing demo data">⚠ ${count.toLocaleString()} demo flights</span>`
-  } else {
-    el.innerHTML = `<span style="color:var(--muted)">${count.toLocaleString()} live aircraft</span>`
-  }
-}
-
-// Smooth position interpolation between fetches
 function animateFlights(){
-  if(usingMock){
-    // Animate mock flights
-    flights = flights.map(f=>{
-      const spd=f.spd/3600/60
-      const rad=(f.hdg*Math.PI)/180
-      return {...f, lat:f.lat+Math.cos(rad)*spd*6, lon:f.lon+Math.sin(rad)*spd*6}
-    })
-  } else {
-    // Gently extrapolate real flight positions between API calls
-    flights = flights.map(f=>{
-      if(!f.spd || !f.hdg) return f
-      const spdDeg = (f.spd * 1852) / 111320 / 3600 * 7 // ~7 seconds of movement
-      const rad = (f.hdg * Math.PI) / 180
-      return {...f, lat: f.lat + Math.cos(rad)*spdDeg, lon: f.lon + Math.sin(rad)*spdDeg}
-    })
-  }
+  flights=flights.map(f=>{
+    const spd=f.spd/3600/60
+    const rad=(f.hdg*Math.PI)/180
+    return {...f, lat:f.lat+Math.cos(rad)*spd*6, lon:f.lon+Math.sin(rad)*spd*6}
+  })
   updateMarkers()
+  if(state.activeTab==='live') renderLiveList()
+  document.getElementById('stat-count').innerHTML=`<span style="color:var(--muted)">${flights.length.toLocaleString()} aircraft</span>`
 }
 
 function filteredFlights(){
