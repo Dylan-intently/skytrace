@@ -734,40 +734,57 @@ function initMap(){
   map.on('zoom',()=>{ document.getElementById('zoom-val').textContent=map.getZoom().toFixed(1) })
 }
 
-const PLANE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="#3b82f6" filter="drop-shadow(0 0 5px rgba(59,130,246,0.7))"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>`
-
 function updateMarkers(){
   const visible=filteredFlights()
   const visIds=new Set(visible.map(f=>f.id))
 
-  // Remove stale
+  // Remove stale markers
   Object.keys(markers).forEach(id=>{
     if(!visIds.has(id)){ markers[id].remove(); delete markers[id] }
   })
 
   visible.forEach(f=>{
+    const selected = f.id === state.selectedId
+    const fillColor = selected ? '#60a5fa' : '#3b82f6'
+    const glowColor = selected ? 'rgba(96,165,250,0.9)' : 'rgba(59,130,246,0.6)'
+
     if(markers[f.id]){
+      // Update position
       markers[f.id].setLngLat([f.lon,f.lat])
-      markers[f.id].getElement().style.transform=`rotate(${f.hdg}deg)`
+      // Rotate the INNER div, not the outer — Mapbox owns the outer transform
+      const inner = markers[f.id].getElement().querySelector('.plane-inner')
+      if(inner) inner.style.transform = `rotate(${f.hdg}deg)`
+      // Update colour
+      const svg = markers[f.id].getElement().querySelector('svg')
+      if(svg){
+        svg.setAttribute('fill', fillColor)
+        svg.style.filter = `drop-shadow(0 0 5px ${glowColor})`
+      }
     } else {
-      const el=document.createElement('div')
-      el.innerHTML=PLANE_SVG
-      el.style.cssText=`cursor:pointer;transform:rotate(${f.hdg}deg);transition:transform 1s ease;width:22px;height:22px;`
-      el.addEventListener('click',()=>selectFlight(f.id))
-      el.addEventListener('mouseenter',()=>{
+      // Outer div — Mapbox will apply its own translate transform here
+      const el = document.createElement('div')
+      el.style.cssText = `width:26px;height:26px;cursor:pointer;`
+
+      // Inner div — we rotate this independently
+      const inner = document.createElement('div')
+      inner.className = 'plane-inner'
+      inner.style.cssText = `width:26px;height:26px;transform:rotate(${f.hdg}deg);transition:transform 1.5s ease;display:flex;align-items:center;justify-content:center;`
+      inner.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="${fillColor}" style="filter:drop-shadow(0 0 5px ${glowColor});transition:fill .3s"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>`
+
+      el.appendChild(inner)
+
+      el.addEventListener('click', ()=>selectFlight(f.id))
+      el.addEventListener('mouseenter', ()=>{
         if(activePopup) activePopup.remove()
-        activePopup=new mapboxgl.Popup({closeButton:false,offset:14})
-          .setLngLat([f.lon,f.lat])
+        activePopup = new mapboxgl.Popup({closeButton:false, offset:16})
+          .setLngLat([f.lon, f.lat])
           .setHTML(`<div class="tooltip-inner"><div class="tooltip-flight">${f.callsign}</div><div class="tooltip-route">${f.orig.iata} → ${f.dest.iata}</div><div class="tooltip-data">${fmtAlt(f.alt)} · ${fmtSpd(f.spd)} · ${f.acType.icao}</div></div>`)
           .addTo(map)
       })
-      el.addEventListener('mouseleave',()=>{ if(activePopup){activePopup.remove();activePopup=null} })
-      markers[f.id]=new mapboxgl.Marker({element:el,anchor:'center'}).setLngLat([f.lon,f.lat]).addTo(map)
+      el.addEventListener('mouseleave', ()=>{ if(activePopup){ activePopup.remove(); activePopup=null } })
+
+      markers[f.id] = new mapboxgl.Marker({element:el, anchor:'center'}).setLngLat([f.lon,f.lat]).addTo(map)
     }
-    // Highlight selected
-    const el=markers[f.id].getElement()
-    el.querySelector('svg').setAttribute('fill', f.id===state.selectedId ? '#60a5fa' : '#3b82f6')
-    el.querySelector('svg').setAttribute('filter', f.id===state.selectedId ? 'drop-shadow(0 0 10px rgba(96,165,250,0.9))' : 'drop-shadow(0 0 5px rgba(59,130,246,0.7))')
   })
 }
 
@@ -792,6 +809,92 @@ function fmtFromNow(iso){
   return `${Math.floor(diff/60)}h ${Math.round(diff%60)}m`
 }
 
+// ── Flight path on map ───────────────────────────────────────────────
+function drawFlightPath(f){
+  clearFlightPath()
+
+  // Build a curved great-circle-ish path: origin → current pos → destination
+  const points = interpolatePath(
+    [f.orig.lon, f.orig.lat],
+    [f.lon, f.lat],
+    [f.dest.lon, f.dest.lat],
+    60
+  )
+
+  const completedPoints = interpolatePath(
+    [f.orig.lon, f.orig.lat],
+    [f.lon, f.lat],
+    [f.lon, f.lat],
+    30
+  )
+
+  // Completed portion (dimmer)
+  if(!map.getSource('path-done')){
+    map.addSource('path-done', {type:'geojson', data:{type:'Feature',geometry:{type:'LineString',coordinates:completedPoints}}})
+    map.addLayer({id:'path-done', type:'line', source:'path-done', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#3b82f6','line-width':2,'line-opacity':0.35,'line-dasharray':[2,2]}})
+  } else {
+    map.getSource('path-done').setData({type:'Feature',geometry:{type:'LineString',coordinates:completedPoints}})
+  }
+
+  // Remaining portion (brighter)
+  const remainingPoints = interpolatePath(
+    [f.lon, f.lat],
+    [f.dest.lon, f.dest.lat],
+    [f.dest.lon, f.dest.lat],
+    30
+  )
+  if(!map.getSource('path-remain')){
+    map.addSource('path-remain', {type:'geojson', data:{type:'Feature',geometry:{type:'LineString',coordinates:remainingPoints}}})
+    map.addLayer({id:'path-remain', type:'line', source:'path-remain', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#60a5fa','line-width':2,'line-opacity':0.7,'line-dasharray':[4,3]}})
+  } else {
+    map.getSource('path-remain').setData({type:'Feature',geometry:{type:'LineString',coordinates:remainingPoints}})
+  }
+
+  // Airport dot markers
+  const airports = {type:'FeatureCollection', features:[
+    {type:'Feature', geometry:{type:'Point', coordinates:[f.orig.lon, f.orig.lat]}, properties:{label:f.orig.iata}},
+    {type:'Feature', geometry:{type:'Point', coordinates:[f.dest.lon, f.dest.lat]}, properties:{label:f.dest.iata}},
+  ]}
+  if(!map.getSource('path-airports')){
+    map.addSource('path-airports', {type:'geojson', data:airports})
+    map.addLayer({id:'path-airports-circle', type:'circle', source:'path-airports', paint:{'circle-radius':5,'circle-color':'#1e293b','circle-stroke-width':2,'circle-stroke-color':'#60a5fa','circle-opacity':0.9}})
+    map.addLayer({id:'path-airports-label', type:'symbol', source:'path-airports', layout:{'text-field':['get','label'],'text-size':11,'text-offset':[0,-1.2],'text-anchor':'bottom','text-font':['DIN Offc Pro Medium','Arial Unicode MS Bold']}, paint:{'text-color':'#e2e8f0','text-halo-color':'#0f1117','text-halo-width':2}})
+  } else {
+    map.getSource('path-airports').setData(airports)
+  }
+}
+
+// Generate interpolated path points between positions
+function interpolatePath(start, mid, end, steps){
+  const pts = []
+  // Start → mid
+  for(let i=0; i<=steps/2; i++){
+    const t = i / (steps/2)
+    pts.push([
+      start[0] + (mid[0]-start[0])*t,
+      start[1] + (mid[1]-start[1])*t,
+    ])
+  }
+  // Mid → end
+  for(let i=1; i<=steps/2; i++){
+    const t = i / (steps/2)
+    pts.push([
+      mid[0] + (end[0]-mid[0])*t,
+      mid[1] + (end[1]-mid[1])*t,
+    ])
+  }
+  return pts
+}
+
+function clearFlightPath(){
+  ['path-airports-label','path-airports-circle','path-remain','path-done'].forEach(id=>{
+    if(map.getLayer(id)) map.removeLayer(id)
+  })
+  ;['path-airports','path-remain','path-done'].forEach(id=>{
+    if(map.getSource(id)) map.removeSource(id)
+  })
+}
+
 // ── Selection ────────────────────────────────────────────────────────
 function selectFlight(id){
   state.selectedId=id
@@ -799,6 +902,7 @@ function selectFlight(id){
   const f=flights.find(x=>x.id===id)
   if(!f) return
   map.flyTo({center:[f.lon,f.lat],zoom:Math.max(map.getZoom(),6),duration:900,essential:true})
+  drawFlightPath(f)
   openPanel(f)
   if(state.activeTab==='live') renderLiveList()
 }
@@ -898,6 +1002,7 @@ function openPanel(f){
 function closePanel(){
   document.getElementById('detail-panel').classList.remove('open')
   state.selectedId=null
+  clearFlightPath()
   updateMarkers()
   if(state.activeTab==='live') renderLiveList()
 }
