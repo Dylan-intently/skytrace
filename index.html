@@ -1,645 +1,420 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SkyTrace — Live Flight Tracker</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SkyTrace — Live Flight Tracker</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet"/>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--s1:#0f1117;--s2:#161822;--s3:#1c1f2e;--s4:#232638;
+  --border:rgba(255,255,255,0.07);--text:#e8eaf0;--muted:#6b7280;
+  --blue:#3b82f6;--blue-dim:rgba(59,130,246,0.15);--blue-glow:rgba(59,130,246,0.35);
+  --green:#22c55e;--orange:#f59e0b;--red:#ef4444;--purple:#8b5cf6;
+  --glass:rgba(15,17,23,0.85);--r:14px;
+  --font:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased}
+.glass{background:var(--glass);border:1px solid var(--border);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%)}
 
-  <!-- Mapbox GL JS -->
-  <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet" />
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
+/* Map */
+#map{position:fixed;inset:0;width:100%;height:100%}
+.mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right,.mapboxgl-ctrl-attrib{display:none!important}
+.mapboxgl-popup-content{background:rgba(15,17,23,.97)!important;border:1px solid var(--border)!important;border-radius:10px!important;padding:0!important;box-shadow:0 8px 32px rgba(0,0,0,.5)!important}
+.mapboxgl-popup-tip{display:none!important}
+.tt{padding:8px 11px}
+.tt-flight{font-size:13px;font-weight:600;margin-bottom:2px}
+.tt-route{font-size:11px;color:var(--muted);margin-bottom:4px}
+.tt-data{font-size:10px;color:#9ca3af;font-family:var(--mono)}
 
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+/* Nav */
+#nav{position:fixed;top:0;left:0;right:0;z-index:100;height:52px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--glass);border-bottom:1px solid var(--border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.logo{display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--text);flex-shrink:0}
+.logo-icon{width:28px;height:28px;border-radius:8px;background:var(--blue);display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px var(--blue-glow)}
+.logo-icon svg{width:14px;height:14px;fill:white}
+.logo-text{font-size:14px;font-weight:600;letter-spacing:-.02em}
+.ndiv{width:1px;height:20px;background:var(--border);flex-shrink:0}
+.nav-btn{display:flex;align-items:center;gap:6px;padding:0 10px;height:30px;border-radius:8px;border:none;background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;transition:color .15s,background .15s;white-space:nowrap;text-decoration:none}
+.nav-btn:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.nav-btn.active{color:var(--blue);background:var(--blue-dim)}
+.nav-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:4px}
 
-  <style>
-    /* ── Reset & tokens ─────────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Search */
+#sw{position:relative;flex:1;max-width:420px}
+#si{width:100%;height:32px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:var(--font);font-size:13px;padding:0 32px;outline:none;transition:border-color .2s,box-shadow .2s}
+#si::placeholder{color:var(--muted)}
+#si:focus{border-color:rgba(59,130,246,.5);box-shadow:0 0 0 3px var(--blue-dim)}
+.si-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none}
+.si-icon svg{width:13px;height:13px;stroke:var(--muted);fill:none;stroke-width:2}
+#sc{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);display:none;padding:2px;line-height:0}
+#sc svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+#sd{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);box-shadow:0 20px 60px rgba(0,0,0,.6);overflow:hidden;display:none;z-index:200;max-height:400px;overflow-y:auto}
+#sd.open{display:block}
+.ds-label{font-size:10px;color:var(--muted);padding:10px 12px 4px;text-transform:uppercase;letter-spacing:.06em}
+.dr{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .15s}
+.dr:hover{background:rgba(255,255,255,.04)}
+.dr-icon{width:28px;height:28px;border-radius:8px;background:var(--s3);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.dr-icon svg{width:13px;height:13px;stroke:var(--muted);fill:none;stroke-width:2}
+.dr-t{font-size:13px;font-weight:500}
+.dr-s{font-size:11px;color:var(--muted);margin-top:1px}
+.no-res{padding:20px 12px;text-align:center;font-size:13px;color:var(--muted)}
 
-    :root {
-      --bg:        #0a0b0e;
-      --surface1:  #0f1117;
-      --surface2:  #161822;
-      --surface3:  #1c1f2e;
-      --surface4:  #232638;
-      --border:    rgba(255,255,255,0.07);
-      --text:      #e8eaf0;
-      --muted:     #6b7280;
-      --blue:      #3b82f6;
-      --blue-dim:  rgba(59,130,246,0.15);
-      --blue-glow: rgba(59,130,246,0.35);
-      --green:     #22c55e;
-      --orange:    #f59e0b;
-      --red:       #ef4444;
-      --purple:    #8b5cf6;
-      --glass-bg:  rgba(15,17,23,0.82);
-      --radius:    14px;
-      --font:      'Inter', system-ui, sans-serif;
-      --mono:      'JetBrains Mono', monospace;
-    }
+/* Sidebar */
+#sidebar{position:fixed;left:0;top:52px;bottom:0;width:268px;z-index:90;background:var(--glass);border-right:1px solid var(--border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;flex-direction:column;transform:translateX(0);transition:transform .35s cubic-bezier(.16,1,.3,1)}
+#sidebar.hidden{transform:translateX(-100%)}
+.sb-tabs{display:flex;gap:4px;padding:8px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.sb-tabs::-webkit-scrollbar{display:none}
+.sb-tab{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:8px;border:none;background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.sb-tab:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.sb-tab.active{color:var(--blue);background:var(--blue-dim)}
+.sb-tab svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+.sb-body{flex:1;overflow-y:auto;padding:8px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.sb-body::-webkit-scrollbar{width:3px}
+.sb-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
 
-    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+/* Live bar */
+.live-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 4px}
+.live-ind{display:flex;align-items:center;gap:6px}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live-lbl{font-size:11px;color:var(--green);font-weight:500}
+.live-cnt{font-size:11px;color:var(--muted)}
 
-    /* ── Glass utility ──────────────────────────────────────────── */
-    .glass {
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      backdrop-filter: blur(20px) saturate(160%);
-      -webkit-backdrop-filter: blur(20px) saturate(160%);
-    }
+/* Flight items */
+.fi{padding:10px;border-radius:10px;cursor:pointer;transition:background .15s;margin-bottom:2px}
+.fi:hover{background:rgba(255,255,255,.04)}
+.fi.sel{background:var(--blue-dim);outline:1px solid rgba(59,130,246,.3)}
+.fi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.fi-cs{font-size:13px;font-weight:600}
+.fi-al{font-size:11px;color:var(--muted)}
+.fi-route{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.fi-iata{font-size:11px;font-weight:600}
+.fi-bar{flex:1;height:2px;background:var(--s3);border-radius:1px;position:relative}
+.fi-fill{position:absolute;left:0;top:0;height:100%;background:var(--blue);border-radius:1px}
+.fi-dot{width:5px;height:5px;border-radius:50%;background:var(--blue);position:absolute;top:50%;transform:translate(-50%,-50%)}
+.fi-stats{display:flex;gap:8px;font-size:10px;color:var(--muted);font-family:var(--mono)}
 
-    /* ── Map ────────────────────────────────────────────────────── */
-    #map { position: fixed; inset: 0; width: 100%; height: 100%; }
-    .mapboxgl-ctrl-bottom-left, .mapboxgl-ctrl-bottom-right, .mapboxgl-ctrl-attrib { display: none !important; }
+/* Empty state */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;gap:10px}
+.empty-icon{width:48px;height:48px;border-radius:14px;background:var(--s3);display:flex;align-items:center;justify-content:center}
+.empty-icon svg{width:22px;height:22px;stroke:var(--muted);fill:none;stroke-width:1.5}
+.empty-txt{font-size:12px;color:var(--muted);line-height:1.6;max-width:170px}
 
-    /* ── Top Nav ────────────────────────────────────────────────── */
-    #nav {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px;
-      background: var(--glass-bg); border-bottom: 1px solid var(--border);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    }
+/* Filter */
+.f-sec{padding:4px}
+.f-title{font-size:12px;font-weight:600;margin-bottom:12px;padding:0 4px;display:flex;align-items:center;justify-content:space-between}
+.f-reset{font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;font-family:var(--font)}
+.f-reset:hover{color:var(--text)}
+.f-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;padding:0 4px}
+.f-chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}
+.chip{padding:4px 10px;border-radius:8px;font-size:11px;font-weight:500;background:var(--s3);color:var(--muted);border:none;cursor:pointer;font-family:var(--font);transition:all .15s}
+.chip:hover{color:var(--text)}
+.chip.active{background:var(--blue-dim);color:var(--blue)}
+.f-sw{margin-bottom:14px}
+.f-sh{display:flex;justify-content:space-between;margin-bottom:6px}
+.f-sv{font-size:10px;font-family:var(--mono);color:var(--text)}
+input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer}
 
-    .logo {
-      display: flex; align-items: center; gap: 8px;
-      text-decoration: none; color: var(--text); flex-shrink: 0;
-    }
-    .logo-icon {
-      width: 28px; height: 28px; border-radius: 8px;
-      background: var(--blue); display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 12px var(--blue-glow);
-    }
-    .logo-icon svg { width: 14px; height: 14px; fill: white; }
-    .logo-text { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+/* Detail panel */
+#dp{position:fixed;right:0;top:52px;bottom:0;width:300px;z-index:90;background:var(--glass);border-left:1px solid var(--border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .4s cubic-bezier(.16,1,.3,1)}
+#dp.open{transform:translateX(0)}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.pt{display:flex;align-items:center;gap:8px}
+.picon{width:30px;height:30px;border-radius:8px;background:var(--blue-dim);display:flex;align-items:center;justify-content:center}
+.picon svg{width:14px;height:14px;stroke:var(--blue);fill:none;stroke-width:2}
+.pfn{font-size:13px;font-weight:600}
+.pan{font-size:11px;color:var(--muted)}
+.pclose{width:26px;height:26px;border-radius:7px;border:none;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.pclose:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.pclose svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.pb{flex:1;overflow-y:auto;padding:12px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.pb::-webkit-scrollbar{width:3px}
+.pb::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
 
-    .nav-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+/* Status */
+.sbadge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500}
+.s-er{color:var(--green);background:rgba(34,197,94,.12)}
+.s-bd{color:var(--blue);background:var(--blue-dim)}
+.s-dl{color:var(--orange);background:rgba(245,158,11,.12)}
+.s-ld{color:var(--purple);background:rgba(139,92,246,.12)}
+.s-cn{color:var(--red);background:rgba(239,68,68,.12)}
 
-    /* Search */
-    #search-wrap { position: relative; flex: 1; max-width: 420px; }
-    #search-input {
-      width: 100%; height: 32px; border-radius: 10px; border: 1px solid var(--border);
-      background: var(--surface2); color: var(--text); font-family: var(--font);
-      font-size: 13px; padding: 0 32px 0 32px; outline: none;
-      transition: border-color .2s, box-shadow .2s;
-    }
-    #search-input::placeholder { color: var(--muted); }
-    #search-input:focus { border-color: rgba(59,130,246,.5); box-shadow: 0 0 0 3px var(--blue-dim); }
-    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
-    .search-icon svg { width: 13px; height: 13px; stroke: var(--muted); fill: none; stroke-width: 2; }
-    #search-clear {
-      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-      background: none; border: none; cursor: pointer; color: var(--muted); display: none;
-      padding: 2px; line-height: 0;
-    }
-    #search-clear svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+/* Route card */
+.rcard{background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px}
+.rrow{display:flex;align-items:center;gap:8px}
+.rap{flex:1}
+.riata{font-size:22px;font-weight:700;line-height:1}
+.rcity{font-size:10px;color:var(--muted);margin-top:2px}
+.rtime{font-size:11px;color:var(--blue);margin-top:3px;font-family:var(--mono)}
+.rmid{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
+.rplane{font-size:14px;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.rlw{width:100%;display:flex;align-items:center;gap:2px}
+.rdone{height:2px;border-radius:1px;background:var(--blue)}
+.rrem{flex:1;height:1px;background:var(--s4)}
+.rpct{font-size:10px;color:var(--muted)}
+.pbar{width:100%;height:3px;background:var(--s3);border-radius:2px;margin-top:10px;overflow:hidden}
+.pfill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--blue),#60a5fa);transition:width .5s ease}
 
-    /* Search dropdown */
-    #search-dropdown {
-      position: absolute; top: calc(100% + 6px); left: 0; right: 0;
-      background: var(--surface1); border: 1px solid var(--border); border-radius: var(--radius);
-      box-shadow: 0 20px 60px rgba(0,0,0,.6); overflow: hidden; display: none; z-index: 200;
-    }
-    #search-dropdown.open { display: block; }
-    .dropdown-section-label { font-size: 10px; color: var(--muted); padding: 10px 12px 4px; text-transform: uppercase; letter-spacing: .06em; }
-    .search-result {
-      display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-      cursor: pointer; transition: background .15s;
-    }
-    .search-result:hover { background: rgba(255,255,255,.04); }
-    .result-icon {
-      width: 28px; height: 28px; border-radius: 8px; background: var(--surface3);
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    }
-    .result-icon svg { width: 13px; height: 13px; stroke: var(--muted); fill: none; stroke-width: 2; }
-    .result-title { font-size: 13px; font-weight: 500; }
-    .result-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
-    .no-results { padding: 20px 12px; text-align: center; font-size: 13px; color: var(--muted); }
+/* Tiles */
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.tile{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px}
+.tlbl{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);margin-bottom:5px}
+.tlbl svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
+.tval{font-size:13px;font-weight:600;font-family:var(--mono)}
+.tval.up{color:var(--green)}
+.tval.dn{color:var(--orange)}
 
-    /* Nav buttons */
-    .nav-btn {
-      display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 30px;
-      border-radius: 8px; border: none; background: none; color: var(--muted);
-      font-family: var(--font); font-size: 12px; font-weight: 500; cursor: pointer;
-      transition: color .15s, background .15s; white-space: nowrap; text-decoration: none;
-    }
-    .nav-btn:hover { color: var(--text); background: rgba(255,255,255,.05); }
-    .nav-btn.active { color: var(--blue); background: var(--blue-dim); }
-    .nav-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
-    .nav-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+/* Info card */
+.icard{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.irow{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.irow:last-child{border-bottom:none}
+.ik{font-size:11px;color:var(--muted)}
+.iv{font-size:11px;font-weight:500;font-family:var(--mono)}
 
-    /* ── Sidebar ─────────────────────────────────────────────────── */
-    #sidebar {
-      position: fixed; left: 0; top: 52px; bottom: 0; width: 268px; z-index: 90;
-      background: var(--glass-bg); border-right: 1px solid var(--border);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      display: flex; flex-direction: column;
-      transform: translateX(0); transition: transform .35s cubic-bezier(.16,1,.3,1);
-    }
-    #sidebar.hidden { transform: translateX(-100%); }
+/* Section label */
+.slbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px;padding:0 1px}
 
-    /* Sidebar tabs */
-    .sidebar-tabs {
-      display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--border);
-      overflow-x: auto; scrollbar-width: none;
-    }
-    .sidebar-tabs::-webkit-scrollbar { display: none; }
-    .sidebar-tab {
-      display: flex; align-items: center; gap: 5px; padding: 5px 9px;
-      border-radius: 8px; border: none; background: none; color: var(--muted);
-      font-family: var(--font); font-size: 11px; font-weight: 500; cursor: pointer;
-      transition: all .15s; white-space: nowrap; flex-shrink: 0;
-    }
-    .sidebar-tab:hover { color: var(--text); background: rgba(255,255,255,.05); }
-    .sidebar-tab.active { color: var(--blue); background: var(--blue-dim); }
-    .sidebar-tab svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
+/* Panel actions */
+.pa{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0}
+.abtn{flex:1;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .15s}
+.abtn:hover{background:var(--s3)}
+.abtn.primary{background:var(--blue-dim);border-color:rgba(59,130,246,.3);color:var(--blue)}
+.abtn.primary:hover{background:rgba(59,130,246,.25)}
+.abtn.primary.on{background:var(--blue);color:white;border-color:var(--blue);box-shadow:0 0 10px var(--blue-glow)}
+.abtn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
 
-    /* Sidebar content */
-    .sidebar-content { flex: 1; overflow-y: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.1) transparent; }
-    .sidebar-content::-webkit-scrollbar { width: 3px; }
-    .sidebar-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+/* Map controls */
+#zc{position:fixed;right:14px;top:50%;transform:translateY(-50%);z-index:80;display:flex;flex-direction:column;gap:4px}
+.zb{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--glass);color:var(--text);cursor:pointer;backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;transition:all .15s}
+.zb:hover{background:var(--s3)}
+.zb svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.zd{height:1px;background:var(--border);margin:2px 0}
 
-    /* Live stats bar */
-    .live-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 4px; }
-    .live-indicator { display: flex; align-items: center; gap: 6px; }
-    .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
-    .live-count { font-size: 11px; color: var(--muted); }
-    .live-label { font-size: 11px; color: var(--green); font-weight: 500; }
+/* Stats bar */
+#sb{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:14px;padding:8px 18px;border-radius:20px;background:var(--glass);border:1px solid var(--border);backdrop-filter:blur(16px);font-size:11px;white-space:nowrap}
+.si2{display:flex;align-items:center;gap:5px}
+.sdv{width:1px;height:12px;background:var(--border)}
 
-    /* Flight list items */
-    .flight-item {
-      padding: 10px; border-radius: 10px; cursor: pointer;
-      transition: background .15s; margin-bottom: 2px;
-    }
-    .flight-item:hover { background: rgba(255,255,255,.04); }
-    .flight-item.selected { background: var(--blue-dim); outline: 1px solid rgba(59,130,246,.3); }
-    .fi-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-    .fi-callsign { font-size: 13px; font-weight: 600; }
-    .fi-airline { font-size: 11px; color: var(--muted); }
-    .fi-route { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-    .fi-iata { font-size: 11px; font-weight: 600; }
-    .fi-progress-bar { flex: 1; height: 2px; background: var(--surface3); border-radius: 1px; position: relative; }
-    .fi-progress-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--blue); border-radius: 1px; }
-    .fi-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--blue); position: absolute; top: 50%; transform: translate(-50%, -50%); }
-    .fi-stats { display: flex; gap: 10px; font-size: 10px; color: var(--muted); font-family: var(--mono); }
+/* Airport modal */
+#am{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
+#am.open{display:flex}
+.mbox{width:90%;max-width:720px;max-height:80vh;border-radius:20px;overflow:hidden;background:var(--s1);border:1px solid var(--border);display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.7)}
+.mhdr{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.mt{font-size:16px;font-weight:700}
+.ms{font-size:12px;color:var(--muted);margin-top:2px}
+.mcl{width:28px;height:28px;border-radius:8px;border:none;background:var(--s2);color:var(--muted);cursor:pointer;font-size:16px;transition:all .15s}
+.mcl:hover{color:var(--text);background:var(--s3)}
+.mbdy{flex:1;overflow-y:auto;padding:14px 18px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.mtabs{display:flex;gap:6px;margin-bottom:14px}
+.mtab{padding:5px 12px;border-radius:8px;border:none;background:var(--s2);color:var(--muted);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.mtab.active{background:var(--blue-dim);color:var(--blue)}
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.05em}
+td{font-size:12px;padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.04)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.03)}
+.tmono{font-family:var(--mono)}
+.dly{color:var(--orange);font-size:10px}
 
-    /* Filter section */
-    .filter-section { padding: 4px; }
-    .filter-title { font-size: 12px; font-weight: 600; margin-bottom: 12px; padding: 0 4px; display: flex; align-items: center; justify-content: space-between; }
-    .filter-reset { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; font-family: var(--font); }
-    .filter-reset:hover { color: var(--text); }
-    .filter-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; padding: 0 4px; }
-    .filter-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
-    .chip {
-      padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 500;
-      background: var(--surface3); color: var(--muted); border: none; cursor: pointer;
-      font-family: var(--font); transition: all .15s;
-    }
-    .chip:hover { color: var(--text); }
-    .chip.active { background: var(--blue-dim); color: var(--blue); }
-    .filter-slider-wrap { margin-bottom: 14px; }
-    .filter-slider-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
-    .filter-slider-val { font-size: 10px; font-family: var(--mono); color: var(--text); }
-    input[type=range] { width: 100%; accent-color: var(--blue); cursor: pointer; }
+/* Settings modal */
+#sm{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
+#sm.open{display:flex}
+.sbox{width:90%;max-width:440px;border-radius:20px;background:var(--s1);border:1px solid var(--border);box-shadow:0 30px 80px rgba(0,0,0,.7);overflow:hidden}
+.ssec{padding:16px 18px;border-bottom:1px solid var(--border)}
+.ssec:last-child{border-bottom:none}
+.stitle{font-size:12px;font-weight:600;margin-bottom:12px;color:var(--blue)}
+.srow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.srow:last-child{margin-bottom:0}
+.slabel{font-size:13px}
+.sdesc{font-size:11px;color:var(--muted);margin-top:1px}
+.tog{width:36px;height:20px;border-radius:10px;background:var(--s3);border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.tog.on{background:var(--blue)}
+.tog::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:white;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tog.on::after{transform:translateX(16px)}
+.ogrp{display:flex;gap:4px;flex-wrap:wrap}
+.obtn{padding:4px 10px;border-radius:7px;border:none;background:var(--s3);color:var(--muted);font-family:var(--font);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s}
+.obtn.active{background:var(--blue-dim);color:var(--blue)}
 
-    /* Empty states */
-    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; gap: 10px; }
-    .empty-icon { width: 48px; height: 48px; border-radius: 14px; background: var(--surface3); display: flex; align-items: center; justify-content: center; }
-    .empty-icon svg { width: 22px; height: 22px; stroke: var(--muted); fill: none; stroke-width: 1.5; }
-    .empty-text { font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 160px; }
+/* Toast */
+.toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--s3);border:1px solid var(--border);border-radius:10px;padding:8px 16px;font-size:12px;z-index:999;backdrop-filter:blur(12px);pointer-events:none;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
 
-    /* ── Aircraft detail panel ───────────────────────────────────── */
-    #detail-panel {
-      position: fixed; right: 0; top: 52px; bottom: 0; width: 300px; z-index: 90;
-      background: var(--glass-bg); border-left: 1px solid var(--border);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      display: flex; flex-direction: column;
-      transform: translateX(100%); transition: transform .4s cubic-bezier(.16,1,.3,1);
-    }
-    #detail-panel.open { transform: translateX(0); }
-
-    .panel-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 14px 14px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-    }
-    .panel-title { display: flex; align-items: center; gap: 8px; }
-    .panel-icon { width: 30px; height: 30px; border-radius: 8px; background: var(--blue-dim); display: flex; align-items: center; justify-content: center; }
-    .panel-icon svg { width: 14px; height: 14px; stroke: var(--blue); fill: none; stroke-width: 2; }
-    .panel-flight { font-size: 13px; font-weight: 600; }
-    .panel-airline { font-size: 11px; color: var(--muted); }
-    .panel-close { width: 26px; height: 26px; border-radius: 7px; border: none; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
-    .panel-close:hover { background: rgba(255,255,255,.06); color: var(--text); }
-    .panel-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
-
-    .panel-body { flex: 1; overflow-y: auto; padding: 12px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.1) transparent; }
-    .panel-body::-webkit-scrollbar { width: 3px; }
-    .panel-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
-
-    /* Status badge */
-    .status-badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
-    .status-enroute { color: var(--green); background: rgba(34,197,94,.12); }
-    .status-boarding { color: var(--blue); background: var(--blue-dim); }
-    .status-delayed { color: var(--orange); background: rgba(245,158,11,.12); }
-    .status-landed { color: var(--purple); background: rgba(139,92,246,.12); }
-    .status-cancelled { color: var(--red); background: rgba(239,68,68,.12); }
-
-    /* Route display */
-    .route-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
-    .route-row { display: flex; align-items: center; gap: 8px; }
-    .route-airport { flex: 1; }
-    .route-iata { font-size: 22px; font-weight: 700; line-height: 1; }
-    .route-city { font-size: 10px; color: var(--muted); margin-top: 2px; }
-    .route-time { font-size: 11px; color: var(--blue); margin-top: 3px; font-family: var(--mono); }
-    .route-mid { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-    .route-plane { font-size: 14px; animation: float 3s ease-in-out infinite; }
-    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-    .route-line-wrap { width: 100%; display: flex; align-items: center; gap: 2px; }
-    .route-done { height: 2px; border-radius: 1px; background: var(--blue); }
-    .route-remain { flex: 1; height: 1px; background: var(--surface4); }
-    .route-pct { font-size: 10px; color: var(--muted); }
-    .progress-bar { width: 100%; height: 3px; background: var(--surface3); border-radius: 2px; margin-top: 10px; overflow: hidden; }
-    .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--blue), #60a5fa); transition: width .5s ease; }
-
-    /* Data tiles */
-    .tiles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
-    .tile { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
-    .tile-label { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); margin-bottom: 5px; }
-    .tile-label svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; }
-    .tile-value { font-size: 13px; font-weight: 600; font-family: var(--mono); }
-    .tile-value.up { color: var(--green); }
-    .tile-value.down { color: var(--orange); }
-
-    /* Info table */
-    .info-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
-    .info-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
-    .info-row:last-child { border-bottom: none; }
-    .info-key { font-size: 11px; color: var(--muted); }
-    .info-val { font-size: 11px; font-weight: 500; font-family: var(--mono); }
-
-    /* Weather mini */
-    .weather-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
-    .weather-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .weather-desc { font-size: 12px; }
-    .weather-temp { font-size: 18px; font-weight: 700; }
-    .weather-details { font-size: 10px; color: var(--muted); }
-
-    /* Section label */
-    .section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 6px; padding: 0 1px; }
-
-    /* Panel actions */
-    .panel-actions { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; }
-    .action-btn {
-      flex: 1; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2);
-      color: var(--text); font-family: var(--font); font-size: 12px; font-weight: 500; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 5px;
-      transition: all .15s;
-    }
-    .action-btn:hover { background: var(--surface3); }
-    .action-btn.primary { background: var(--blue-dim); border-color: rgba(59,130,246,.3); color: var(--blue); }
-    .action-btn.primary:hover { background: rgba(59,130,246,.25); }
-    .action-btn.primary.active { background: var(--blue); color: white; border-color: var(--blue); box-shadow: 0 0 10px var(--blue-glow); }
-    .action-btn svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
-
-    /* ── Map overlays ────────────────────────────────────────────── */
-    #zoom-controls {
-      position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 80;
-      display: flex; flex-direction: column; gap: 4px;
-    }
-    .zoom-btn {
-      width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border);
-      background: var(--glass-bg); color: var(--text); cursor: pointer; font-size: 16px;
-      backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center;
-      transition: all .15s;
-    }
-    .zoom-btn:hover { background: var(--surface3); }
-    .zoom-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
-    .zoom-divider { height: 1px; background: var(--border); margin: 2px 0; }
-
-    /* Stats bar */
-    #stats-bar {
-      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 80;
-      display: flex; align-items: center; gap: 14px; padding: 8px 18px; border-radius: 20px;
-      background: var(--glass-bg); border: 1px solid var(--border); backdrop-filter: blur(16px);
-      font-size: 11px; white-space: nowrap;
-    }
-    .stat-item { display: flex; align-items: center; gap: 5px; }
-    .stat-divider { width: 1px; height: 12px; background: var(--border); }
-
-    /* Airport modal */
-    #airport-modal {
-      position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center;
-      background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
-    }
-    #airport-modal.open { display: flex; }
-    .modal-box {
-      width: 90%; max-width: 720px; max-height: 80vh; border-radius: 20px; overflow: hidden;
-      background: var(--surface1); border: 1px solid var(--border); display: flex; flex-direction: column;
-      box-shadow: 0 30px 80px rgba(0,0,0,.7);
-    }
-    .modal-header { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-    .modal-title { font-size: 16px; font-weight: 700; }
-    .modal-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .modal-close { width: 28px; height: 28px; border-radius: 8px; border: none; background: var(--surface2); color: var(--muted); cursor: pointer; font-size: 16px; transition: all .15s; }
-    .modal-close:hover { color: var(--text); background: var(--surface3); }
-    .modal-body { flex: 1; overflow-y: auto; padding: 14px 18px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.1) transparent; }
-    .modal-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-    .modal-tab { padding: 5px 12px; border-radius: 8px; border: none; background: var(--surface2); color: var(--muted); font-family: var(--font); font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s; }
-    .modal-tab.active { background: var(--blue-dim); color: var(--blue); }
-
-    /* Board table */
-    .board-table { width: 100%; border-collapse: collapse; }
-    .board-table th { font-size: 10px; color: var(--muted); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .05em; }
-    .board-table td { font-size: 12px; padding: 9px 8px; border-bottom: 1px solid rgba(255,255,255,.04); }
-    .board-table tr:last-child td { border-bottom: none; }
-    .board-table tr:hover td { background: rgba(255,255,255,.03); }
-    .td-mono { font-family: var(--mono); }
-    .delay-red { color: var(--orange); font-size: 10px; }
-
-    /* Settings modal */
-    #settings-modal {
-      position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center;
-      background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
-    }
-    #settings-modal.open { display: flex; }
-    .settings-box { width: 90%; max-width: 440px; border-radius: 20px; background: var(--surface1); border: 1px solid var(--border); box-shadow: 0 30px 80px rgba(0,0,0,.7); overflow: hidden; }
-    .settings-section { padding: 16px 18px; border-bottom: 1px solid var(--border); }
-    .settings-section:last-child { border-bottom: none; }
-    .settings-section-title { font-size: 12px; font-weight: 600; margin-bottom: 12px; color: var(--blue); }
-    .setting-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .setting-row:last-child { margin-bottom: 0; }
-    .setting-label { font-size: 13px; }
-    .setting-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
-    .toggle { width: 36px; height: 20px; border-radius: 10px; background: var(--surface3); border: none; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
-    .toggle.on { background: var(--blue); }
-    .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-    .toggle.on::after { transform: translateX(16px); }
-    .option-group { display: flex; gap: 4px; flex-wrap: wrap; }
-    .opt-btn { padding: 4px 10px; border-radius: 7px; border: none; background: var(--surface3); color: var(--muted); font-family: var(--font); font-size: 11px; font-weight: 500; cursor: pointer; transition: all .15s; }
-    .opt-btn.active { background: var(--blue-dim); color: var(--blue); }
-
-    /* Tooltip */
-    .mapboxgl-popup-content {
-      background: rgba(15,17,23,.97) !important; border: 1px solid var(--border) !important;
-      border-radius: 10px !important; padding: 0 !important; box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
-    }
-    .mapboxgl-popup-tip { display: none !important; }
-    .tooltip-inner { padding: 8px 11px; }
-    .tooltip-flight { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-    .tooltip-route { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-    .tooltip-data { font-size: 10px; color: #9ca3af; font-family: var(--mono); }
-
-    /* Skeleton loader */
-    .skeleton { background: var(--surface3); border-radius: 6px; position: relative; overflow: hidden; }
-    .skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.04) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.8s linear infinite; }
-    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-
-    /* Mobile adjustments */
-    @media (max-width: 640px) {
-      #sidebar { width: 240px; }
-      #detail-panel { width: 100%; }
-      .logo-text { display: none; }
-      .nav-btn span { display: none; }
-    }
-  </style>
+@media(max-width:640px){
+  #sidebar{width:240px}
+  #dp{width:100%}
+  .logo-text,.nav-btn span{display:none}
+}
+</style>
 </head>
 <body>
 
-<!-- ── MAP ──────────────────────────────────────────────────────── -->
 <div id="map"></div>
 
-<!-- ── TOP NAV ──────────────────────────────────────────────────── -->
 <nav id="nav">
   <a class="logo" href="#">
-    <div class="logo-icon">
-      <svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
-    </div>
+    <div class="logo-icon"><svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>
     <span class="logo-text">SkyTrace</span>
   </a>
-
-  <div class="nav-divider"></div>
-
-  <button class="nav-btn active" id="toggle-sidebar-btn" onclick="toggleSidebar()">
+  <div class="ndiv"></div>
+  <button class="nav-btn active" id="menu-btn" onclick="toggleSidebar()">
     <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     <span>Menu</span>
   </button>
-
-  <div id="search-wrap">
-    <div class="search-icon">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    </div>
-    <input type="text" id="search-input" placeholder="Search flights, airports, airlines…" autocomplete="off" spellcheck="false" />
-    <button id="search-clear" onclick="clearSearch()">
-      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
-    <div id="search-dropdown"></div>
+  <div id="sw">
+    <div class="si-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+    <input type="text" id="si" placeholder="Search flights, airports, airlines…" autocomplete="off" spellcheck="false"/>
+    <button id="sc" onclick="clearSearch()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <div id="sd"></div>
   </div>
-
   <div class="nav-right">
     <button class="nav-btn" onclick="openAirportModal('EGLL')">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
       <span>Airports</span>
     </button>
-    <button class="nav-btn" id="settings-btn" onclick="openSettings()">
+    <button class="nav-btn" onclick="openSettings()">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span>Settings</span>
     </button>
   </div>
 </nav>
 
-<!-- ── SIDEBAR ───────────────────────────────────────────────────── -->
 <aside id="sidebar">
-  <div class="sidebar-tabs">
-    <button class="sidebar-tab active" onclick="setTab('live', this)">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Live
-    </button>
-    <button class="sidebar-tab" onclick="setTab('filters', this)">
-      <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-      Filters
-    </button>
-    <button class="sidebar-tab" onclick="setTab('airports', this)">
-      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-      Airports
-    </button>
-    <button class="sidebar-tab" onclick="setTab('saved', this)">
-      <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      Saved
-    </button>
+  <div class="sb-tabs">
+    <button class="sb-tab active" onclick="setTab('live',this)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Live</button>
+    <button class="sb-tab" onclick="setTab('filters',this)"><svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Filters</button>
+    <button class="sb-tab" onclick="setTab('airports',this)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Airports</button>
+    <button class="sb-tab" onclick="setTab('saved',this)"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Saved</button>
   </div>
-
-  <div class="sidebar-content" id="sidebar-content">
-    <!-- populated by JS -->
-  </div>
+  <div class="sb-body" id="sb-body"></div>
 </aside>
 
-<!-- ── DETAIL PANEL ──────────────────────────────────────────────── -->
-<div id="detail-panel">
-  <div class="panel-header">
-    <div class="panel-title">
-      <div class="panel-icon">
-        <svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" stroke="none" fill="currentColor"/></svg>
-      </div>
-      <div>
-        <div class="panel-flight" id="panel-flight-num">—</div>
-        <div class="panel-airline" id="panel-airline-name">—</div>
-      </div>
+<div id="dp">
+  <div class="ph">
+    <div class="pt">
+      <div class="picon"><svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>
+      <div><div class="pfn" id="p-fn">—</div><div class="pan" id="p-an">—</div></div>
     </div>
-    <button class="panel-close" onclick="closePanel()">
-      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
+    <button class="pclose" onclick="closePanel()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
-  <div class="panel-body" id="panel-body"></div>
-  <div class="panel-actions" id="panel-actions"></div>
+  <div class="pb" id="p-body"></div>
+  <div class="pa" id="p-actions"></div>
 </div>
 
-<!-- ── MAP CONTROLS ──────────────────────────────────────────────── -->
-<div id="zoom-controls">
-  <button class="zoom-btn" onclick="zoomIn()" title="Zoom in">
-    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-  </button>
-  <button class="zoom-btn" onclick="zoomOut()" title="Zoom out">
-    <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-  </button>
-  <div class="zoom-divider"></div>
-  <button class="zoom-btn" onclick="cycleMapStyle()" title="Change map style" id="style-btn">
-    <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
-  </button>
+<div id="zc">
+  <button class="zb" onclick="map.zoomIn({duration:300})" title="Zoom in"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+  <button class="zb" onclick="map.zoomOut({duration:300})" title="Zoom out"><svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+  <div class="zd"></div>
+  <button class="zb" onclick="cycleStyle()" title="Map style"><svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg></button>
 </div>
 
-<!-- ── STATS BAR ─────────────────────────────────────────────────── -->
-<div id="stats-bar">
-  <div class="stat-item">
-    <div class="live-dot"></div>
-    <span class="live-label">Live</span>
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item" id="stat-count">
-    <svg style="width:12px;height:12px;stroke:var(--muted);fill:none;stroke-width:2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-    <span style="color:var(--muted)">Loading…</span>
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item" id="stat-zoom">
-    <span style="color:var(--muted)">Zoom</span>
-    <span style="font-family:var(--mono);font-size:11px" id="zoom-val">2.5</span>
-  </div>
+<div id="sb">
+  <div class="si2"><div class="live-dot"></div><span class="live-lbl">Live</span></div>
+  <div class="sdv"></div>
+  <div class="si2" id="s-count"><span style="color:var(--muted)">Connecting…</span></div>
+  <div class="sdv"></div>
+  <div class="si2"><span style="color:var(--muted)">Zoom</span><span style="font-family:var(--mono);font-size:11px" id="s-zoom">2.5</span></div>
 </div>
 
-<!-- ── AIRPORT MODAL ─────────────────────────────────────────────── -->
-<div id="airport-modal" onclick="if(event.target===this)closeAirportModal()">
-  <div class="modal-box">
-    <div class="modal-header">
-      <div>
-        <div class="modal-title" id="modal-airport-name">Airport</div>
-        <div class="modal-sub" id="modal-airport-sub"></div>
-      </div>
-      <button class="modal-close" onclick="closeAirportModal()">✕</button>
+<div id="am" onclick="if(event.target===this)closeAirportModal()">
+  <div class="mbox">
+    <div class="mhdr">
+      <div><div class="mt" id="m-name">Airport</div><div class="ms" id="m-sub"></div></div>
+      <button class="mcl" onclick="closeAirportModal()">✕</button>
     </div>
-    <div class="modal-body">
-      <div class="modal-tabs">
-        <button class="modal-tab active" onclick="setAirportTab('departures', this)">Departures</button>
-        <button class="modal-tab" onclick="setAirportTab('arrivals', this)">Arrivals</button>
+    <div class="mbdy">
+      <div class="mtabs">
+        <button class="mtab active" onclick="setAirportTab('dep',this)">Departures</button>
+        <button class="mtab" onclick="setAirportTab('arr',this)">Arrivals</button>
       </div>
-      <div id="modal-board"></div>
+      <div id="m-board"></div>
     </div>
   </div>
 </div>
 
-<!-- ── SETTINGS MODAL ────────────────────────────────────────────── -->
-<div id="settings-modal" onclick="if(event.target===this)closeSettings()">
-  <div class="settings-box">
-    <div class="modal-header">
-      <div><div class="modal-title">Settings</div></div>
-      <button class="modal-close" onclick="closeSettings()">✕</button>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">Map</div>
-      <div class="setting-row">
-        <div><div class="setting-label">Style</div></div>
-        <div class="option-group" id="map-style-opts">
-          <button class="opt-btn active" onclick="setMapStyle('dark',this)">Dark</button>
-          <button class="opt-btn" onclick="setMapStyle('satellite',this)">Satellite</button>
-          <button class="opt-btn" onclick="setMapStyle('terrain',this)">Terrain</button>
-          <button class="opt-btn" onclick="setMapStyle('minimal',this)">Minimal</button>
-        </div>
+<div id="sm" onclick="if(event.target===this)closeSettings()">
+  <div class="sbox">
+    <div class="mhdr"><div><div class="mt">Settings</div></div><button class="mcl" onclick="closeSettings()">✕</button></div>
+    <div class="ssec">
+      <div class="stitle">Map Style</div>
+      <div class="ogrp" id="style-opts">
+        <button class="obtn active" onclick="setMapStyle('dark',this)">Dark</button>
+        <button class="obtn" onclick="setMapStyle('satellite',this)">Satellite</button>
+        <button class="obtn" onclick="setMapStyle('terrain',this)">Terrain</button>
+        <button class="obtn" onclick="setMapStyle('minimal',this)">Minimal</button>
       </div>
     </div>
-    <div class="settings-section">
-      <div class="settings-section-title">Units</div>
-      <div class="setting-row">
-        <div><div class="setting-label">Measurement</div></div>
-        <div class="option-group" id="units-opts">
-          <button class="opt-btn active" onclick="setUnits('aviation',this)">Aviation</button>
-          <button class="opt-btn" onclick="setUnits('metric',this)">Metric</button>
-          <button class="opt-btn" onclick="setUnits('imperial',this)">Imperial</button>
-        </div>
+    <div class="ssec">
+      <div class="stitle">Units</div>
+      <div class="ogrp" id="unit-opts">
+        <button class="obtn active" onclick="setUnits('aviation',this)">Aviation</button>
+        <button class="obtn" onclick="setUnits('metric',this)">Metric</button>
+        <button class="obtn" onclick="setUnits('imperial',this)">Imperial</button>
       </div>
     </div>
-    <div class="settings-section">
-      <div class="settings-section-title">Display</div>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Show altitude labels</div>
-          <div class="setting-desc">Display altitude on aircraft markers</div>
-        </div>
-        <button class="toggle on" id="toggle-alt" onclick="toggleSetting('showAlt',this)"></button>
-      </div>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Cluster aircraft</div>
-          <div class="setting-desc">Group nearby aircraft when zoomed out</div>
-        </div>
-        <button class="toggle on" id="toggle-cluster" onclick="toggleSetting('cluster',this)"></button>
+    <div class="ssec">
+      <div class="stitle">Data Source</div>
+      <div class="srow">
+        <div><div class="slabel">Live OpenSky data</div><div class="sdesc">Real aircraft — may be rate limited</div></div>
+        <button class="tog on" id="tog-live" onclick="toggleLive(this)"></button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ── SCRIPT ────────────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
 <script>
-// ── Config ──────────────────────────────────────────────────────────
-// Add your Mapbox token here:
+// ─── YOUR MAPBOX TOKEN ────────────────────────────────────────────────
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWFwYm94ZHlsIiwiYSI6ImNtcXhnMHF5czFlOG4yc3NhZGhzem1tNmYifQ.nCEotYR2ziFtdspaz5eBnQ'
 
+// ─── Constants ────────────────────────────────────────────────────────
 const MAP_STYLES = {
-  dark: 'mapbox://styles/mapbox/dark-v11',
+  dark:      'mapbox://styles/mapbox/dark-v11',
   satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
-  terrain: 'mapbox://styles/mapbox/outdoors-v12',
-  minimal: 'mapbox://styles/mapbox/light-v11'
+  terrain:   'mapbox://styles/mapbox/outdoors-v12',
+  minimal:   'mapbox://styles/mapbox/light-v11',
 }
 
-// ── State ────────────────────────────────────────────────────────────
-const state = {
-  flights: [],
-  selectedId: null,
-  sidebarOpen: true,
-  activeTab: 'live',
-  filters: { categories: [], maxAlt: 60000, maxSpeed: 700 },
-  settings: { mapStyle: 'dark', units: 'aviation', showAlt: true, cluster: true },
-  saved: JSON.parse(localStorage.getItem('skytrace_saved') || '[]'),
-  currentAirportTab: 'departures',
-  currentAirportIcao: null,
-  tracked: JSON.parse(localStorage.getItem('skytrace_tracked') || '[]'),
+const STYLE_KEYS = ['dark','satellite','terrain','minimal']
+
+const AIRLINE_MAP = {
+  BAW:{iata:'BA',name:'British Airways',cc:'GB'},
+  UAL:{iata:'UA',name:'United Airlines',cc:'US'},
+  DAL:{iata:'DL',name:'Delta Air Lines',cc:'US'},
+  AAL:{iata:'AA',name:'American Airlines',cc:'US'},
+  DLH:{iata:'LH',name:'Lufthansa',cc:'DE'},
+  AFR:{iata:'AF',name:'Air France',cc:'FR'},
+  UAE:{iata:'EK',name:'Emirates',cc:'AE'},
+  SIA:{iata:'SQ',name:'Singapore Airlines',cc:'SG'},
+  QFA:{iata:'QF',name:'Qantas',cc:'AU'},
+  CPA:{iata:'CX',name:'Cathay Pacific',cc:'HK'},
+  JAL:{iata:'JL',name:'Japan Airlines',cc:'JP'},
+  THY:{iata:'TK',name:'Turkish Airlines',cc:'TR'},
+  RYR:{iata:'FR',name:'Ryanair',cc:'IE'},
+  EZY:{iata:'U2',name:'easyJet',cc:'GB'},
+  KLM:{iata:'KL',name:'KLM',cc:'NL'},
+  IBE:{iata:'IB',name:'Iberia',cc:'ES'},
+  SWR:{iata:'LX',name:'SWISS',cc:'CH'},
+  VLG:{iata:'VY',name:'Vueling',cc:'ES'},
+  WZZ:{iata:'W6',name:'Wizz Air',cc:'HU'},
+  TAP:{iata:'TP',name:'TAP Air Portugal',cc:'PT'},
+  CSN:{iata:'CZ',name:'China Southern',cc:'CN'},
+  CCA:{iata:'CA',name:'Air China',cc:'CN'},
+  ANA:{iata:'NH',name:'ANA',cc:'JP'},
+  QTR:{iata:'QR',name:'Qatar Airways',cc:'QA'},
+  ETD:{iata:'EY',name:'Etihad Airways',cc:'AE'},
+  FDX:{iata:'FX',name:'FedEx',cc:'US'},
+  UPS:{iata:'5X',name:'UPS Airlines',cc:'US'},
+  SAS:{iata:'SK',name:'SAS',cc:'SE'},
+  FIN:{iata:'AY',name:'Finnair',cc:'FI'},
+  TOM:{iata:'BY',name:'TUI Airways',cc:'GB'},
+  EXS:{iata:'LS',name:'Jet2',cc:'GB'},
 }
-
-// ── Mock data ────────────────────────────────────────────────────────
-const AIRLINES = [
-  {iata:'BA',name:'British Airways',cc:'GB'},{iata:'UA',name:'United Airlines',cc:'US'},
-  {iata:'DL',name:'Delta Air Lines',cc:'US'},{iata:'LH',name:'Lufthansa',cc:'DE'},
-  {iata:'AF',name:'Air France',cc:'FR'},{iata:'EK',name:'Emirates',cc:'AE'},
-  {iata:'SQ',name:'Singapore Airlines',cc:'SG'},{iata:'QF',name:'Qantas',cc:'AU'},
-  {iata:'CX',name:'Cathay Pacific',cc:'HK'},{iata:'TK',name:'Turkish Airlines',cc:'TR'},
-  {iata:'FR',name:'Ryanair',cc:'IE'},{iata:'U2',name:'easyJet',cc:'GB'},
-  {iata:'KL',name:'KLM',cc:'NL'},{iata:'IB',name:'Iberia',cc:'ES'},
-  {iata:'JL',name:'Japan Airlines',cc:'JP'},{iata:'AA',name:'American Airlines',cc:'US'},
-]
-
-const AC_TYPES = [
-  {icao:'B738',name:'Boeing 737-800'},{icao:'B77W',name:'Boeing 777-300ER'},
-  {icao:'B789',name:'Boeing 787-9'},{icao:'A320',name:'Airbus A320'},
-  {icao:'A321',name:'Airbus A321'},{icao:'A359',name:'Airbus A350-900'},
-  {icao:'A388',name:'Airbus A380-800'},{icao:'E190',name:'Embraer E190'},
-]
 
 const AIRPORTS = [
   {icao:'EGLL',iata:'LHR',name:'London Heathrow',city:'London',cc:'GB',lat:51.4775,lon:-0.4614},
@@ -656,669 +431,620 @@ const AIRPORTS = [
   {icao:'VHHH',iata:'HKG',name:'Hong Kong Intl',city:'Hong Kong',cc:'HK',lat:22.308,lon:113.9185},
 ]
 
-const STATUS_LABELS = {enroute:'En Route',boarding:'Boarding',delayed:'Delayed',landed:'Landed',cancelled:'Cancelled',approaching:'Approaching'}
-
-function rand(a,b){return Math.random()*(b-a)+a}
-function randi(a,b){return Math.floor(rand(a,b))}
-function pick(arr){return arr[randi(0,arr.length)]}
-function flag(cc){ return cc && cc.length===2 ? String.fromCodePoint(...[...cc.toUpperCase()].map(c=>127397+c.charCodeAt(0))) : '🌐' }
-
-function hdgBetween(a,b){
-  const dL=((b.lon-a.lon)*Math.PI)/180
-  const y=Math.sin(dL)*Math.cos(b.lat*Math.PI/180)
-  const x=Math.cos(a.lat*Math.PI/180)*Math.sin(b.lat*Math.PI/180)-Math.sin(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.cos(dL)
-  return((Math.atan2(y,x)*180/Math.PI)+360)%360
+// ─── State ────────────────────────────────────────────────────────────
+const ST = {
+  flights: [],
+  selectedId: null,
+  sidebarOpen: true,
+  activeTab: 'live',
+  filters: { cats: [], maxAlt: 60000, maxSpeed: 700 },
+  settings: { mapStyle: 'dark', units: 'aviation' },
+  saved: JSON.parse(localStorage.getItem('st_saved') || '[]'),
+  useLive: true,
+  airportTab: 'dep',
+  airportIcao: null,
 }
 
-function generateFlights(n=180){
-  return Array.from({length:n},(_,i)=>{
-    const al=pick(AIRLINES), ac=pick(AC_TYPES)
-    const orig=pick(AIRPORTS); let dest=pick(AIRPORTS); while(dest===orig)dest=pick(AIRPORTS)
-    const prog=rand(.05,.95)
-    const lat=orig.lat+(dest.lat-orig.lat)*prog + rand(-2,2)
-    const lon=orig.lon+(dest.lon-orig.lon)*prog + rand(-2,2)
-    const hdg=hdgBetween({lat,lon},{lat:dest.lat,lon:dest.lon})
-    const alt=randi(28000,42000), spd=randi(420,560)
-    const statuses=['enroute','enroute','enroute','boarding','delayed','approaching']
+// ─── Helpers ──────────────────────────────────────────────────────────
+const R = (a,b) => Math.random()*(b-a)+a
+const RI = (a,b) => Math.floor(R(a,b))
+const PK = arr => arr[RI(0,arr.length)]
+const FLAG = cc => (cc && cc.length===2) ? String.fromCodePoint(...[...cc.toUpperCase()].map(c=>127397+c.charCodeAt(0))) : '🌐'
+
+function fmtAlt(ft) {
+  if (!ft) return '—'
+  if (ST.settings.units === 'metric') return `${Math.round(ft*0.3048).toLocaleString()} m`
+  if (ft >= 18000) return `FL${Math.round(ft/100)}`
+  return `${ft.toLocaleString()} ft`
+}
+function fmtSpd(kts) {
+  if (!kts) return '—'
+  if (ST.settings.units === 'metric') return `${Math.round(kts*1.852)} km/h`
+  if (ST.settings.units === 'imperial') return `${Math.round(kts*1.15)} mph`
+  return `${kts} kts`
+}
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) } catch { return '--:--' }
+}
+function fmtFromNow(iso) {
+  if (!iso) return '—'
+  const m = (new Date(iso) - Date.now()) / 60000
+  if (m < 0) return 'Landed'
+  if (m < 60) return `${Math.round(m)}m`
+  return `${Math.floor(m/60)}h ${Math.round(m%60)}m`
+}
+function hdgBetween(a, b) {
+  const dL = ((b.lon-a.lon)*Math.PI)/180
+  const y = Math.sin(dL)*Math.cos(b.lat*Math.PI/180)
+  const x = Math.cos(a.lat*Math.PI/180)*Math.sin(b.lat*Math.PI/180) - Math.sin(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.cos(dL)
+  return ((Math.atan2(y,x)*180/Math.PI)+360)%360
+}
+function toast(msg) {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.classList.add('show')
+  setTimeout(() => el.classList.remove('show'), 2500)
+}
+
+// ─── OpenSky ──────────────────────────────────────────────────────────
+function guessAirline(callsign) {
+  if (!callsign || !callsign.trim()) return {iata:'??',name:'Unknown',cc:'UN'}
+  const prefix = callsign.trim().slice(0,3).toUpperCase()
+  return AIRLINE_MAP[prefix] || {iata:callsign.trim().slice(0,2), name:callsign.trim(), cc:'UN'}
+}
+
+function parseOpenSky(states) {
+  return states.map(s => {
+    const icao24 = s[0], callsign = (s[1]||'').trim()
+    const lon = s[5], lat = s[6]
+    const balt = s[7], onGround = s[8]
+    const spd = s[9], hdg = s[10], vrate = s[11]
+    if (!lat || !lon || onGround) return null
+    const altFt = balt ? Math.round(balt * 3.28084) : 0
+    const spdKts = spd ? Math.round(spd * 1.94384) : 0
+    const vrateFpm = vrate ? Math.round(vrate * 196.85) : 0
+    const airline = guessAirline(callsign)
     return {
-      id:`f${i}`, callsign:`${al.iata}${randi(100,9999)}`, reg:`G-${String.fromCharCode(65+randi(0,26))}${String.fromCharCode(65+randi(0,26))}${String.fromCharCode(65+randi(0,26))}${String.fromCharCode(65+randi(0,26))}`,
+      id: icao24, callsign: callsign || icao24,
+      icao24: icao24.toUpperCase(), airline,
+      acType: {icao:'—', name:'—'},
+      orig: {iata:'—',city:'—',lon:0,lat:0,cc:'UN'},
+      dest: {iata:'—',city:'—',lon:0,lat:0,cc:'UN'},
+      lat, lon, hdg: hdg||0, alt: altFt, spd: spdKts,
+      vrate: vrateFpm, squawk: s[11]||'0000',
+      progress: 50, status:'enroute',
+      eta: null, distNm: null, isLive: true,
+    }
+  }).filter(Boolean)
+}
+
+async function fetchOpenSky() {
+  try {
+    const res = await fetch('https://opensky-network.org/api/states/all', {
+      signal: AbortSignal.timeout(15000)
+    })
+    if (res.status === 429) { toast('OpenSky rate limited — retrying in 15s'); return false }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const parsed = parseOpenSky(data.states || [])
+    if (parsed.length < 5) throw new Error('Too few results')
+    ST.flights = parsed
+    setCount(parsed.length, false)
+    return true
+  } catch(e) {
+    console.warn('OpenSky error:', e.message)
+    return false
+  }
+}
+
+// ─── Mock data ────────────────────────────────────────────────────────
+const AIRLINES_LIST = Object.values(AIRLINE_MAP)
+const AC_TYPES = [
+  {icao:'B738',name:'Boeing 737-800'},{icao:'B77W',name:'Boeing 777-300ER'},
+  {icao:'B789',name:'Boeing 787-9'},{icao:'A320',name:'Airbus A320'},
+  {icao:'A321',name:'Airbus A321'},{icao:'A359',name:'Airbus A350-900'},
+  {icao:'A388',name:'Airbus A380-800'},{icao:'E190',name:'Embraer E190'},
+]
+
+function generateMock(n=200) {
+  return Array.from({length:n}, (_,i) => {
+    const al=PK(AIRLINES_LIST), ac=PK(AC_TYPES)
+    const orig=PK(AIRPORTS); let dest=PK(AIRPORTS); while(dest===orig) dest=PK(AIRPORTS)
+    const prog=R(.05,.95)
+    const lat=orig.lat+(dest.lat-orig.lat)*prog + R(-3,3)
+    const lon=orig.lon+(dest.lon-orig.lon)*prog + R(-3,3)
+    return {
+      id:`m${i}`, callsign:`${al.iata}${RI(100,9999)}`,
       icao24:Math.random().toString(16).slice(2,8).toUpperCase(),
-      airline:al, acType:ac, orig, dest, lat, lon, hdg, alt, spd,
-      vrate:rand(-800,800), squawk:String(randi(1000,7777)),
-      progress:Math.round(prog*100), status:pick(statuses),
-      eta:new Date(Date.now()+rand(20,360)*60000).toISOString(),
-      distNm:Math.round(rand(50,3500)), age:randi(1,18),
-      weather:{temp:randi(-55,5), desc:pick(['Clear','Partly cloudy','Overcast']), wind:randi(10,55), windDir:randi(0,360)},
+      airline:al, acType:ac, orig, dest,
+      lat, lon, hdg:hdgBetween({lat,lon},{lat:dest.lat,lon:dest.lon}),
+      alt:RI(28000,42000), spd:RI(420,560),
+      vrate:R(-800,800), squawk:String(RI(1000,7777)),
+      progress:Math.round(prog*100), status:'enroute',
+      eta:new Date(Date.now()+R(20,360)*60000).toISOString(),
+      distNm:Math.round(R(50,3500)), isLive:false,
     }
   })
 }
 
-let flights = generateFlights()
-
-function animateFlights(){
-  flights=flights.map(f=>{
-    const spd=f.spd/3600/60
-    const rad=(f.hdg*Math.PI)/180
-    return {...f, lat:f.lat+Math.cos(rad)*spd*6, lon:f.lon+Math.sin(rad)*spd*6}
-  })
-  updateMarkers()
-  if(state.activeTab==='live') renderLiveList()
-  document.getElementById('stat-count').innerHTML=`<span style="color:var(--muted)">${flights.length.toLocaleString()} aircraft</span>`
+function setCount(n, isMock) {
+  document.getElementById('s-count').innerHTML = isMock
+    ? `<span style="color:var(--orange)" title="Demo data">⚠ ${n.toLocaleString()} demo</span>`
+    : `<span style="color:var(--muted)">${n.toLocaleString()} aircraft</span>`
 }
 
-function filteredFlights(){
-  return flights.filter(f=>{
-    if(state.filters.categories.length && !state.filters.categories.includes('passenger')) return false
-    if(f.alt > state.filters.maxAlt) return false
-    if(f.spd > state.filters.maxSpeed) return false
+// ─── Data loop ────────────────────────────────────────────────────────
+async function initData() {
+  setCount(0, false)
+  if (ST.useLive) {
+    const ok = await fetchOpenSky()
+    if (!ok) { ST.flights = generateMock(); setCount(ST.flights.length, true) }
+  } else {
+    ST.flights = generateMock()
+    setCount(ST.flights.length, true)
+  }
+  updateMarkers()
+  renderSidebar()
+}
+
+// Refresh from OpenSky every 15s; extrapolate positions every 2s
+setInterval(async () => {
+  if (ST.useLive) {
+    const ok = await fetchOpenSky()
+    if (ok) { updateMarkers(); renderSidebar() }
+  }
+}, 15000)
+
+setInterval(() => {
+  ST.flights = ST.flights.map(f => {
+    if (!f.spd || !f.hdg) return f
+    const deg = (f.spd * 1852) / 111320 / 3600 * 2
+    const rad = (f.hdg * Math.PI) / 180
+    return {...f, lat: f.lat + Math.cos(rad)*deg, lon: f.lon + Math.sin(rad)*deg}
+  })
+  updateMarkers()
+}, 2000)
+
+// ─── Map ──────────────────────────────────────────────────────────────
+let map, markers={}, activePopup=null
+
+function initMap() {
+  mapboxgl.accessToken = MAPBOX_TOKEN
+  map = new mapboxgl.Map({
+    container:'map', style:MAP_STYLES.dark,
+    center:[0,30], zoom:2.5, attributionControl:false, antialias:true
+  })
+  map.on('load', () => {
+    map.setFog({color:'rgb(10,10,20)','high-color':'rgb(20,30,60)','horizon-blend':.02,'space-color':'rgb(5,5,15)','star-intensity':.6})
+    initData()
+  })
+  map.on('zoom', () => { document.getElementById('s-zoom').textContent = map.getZoom().toFixed(1) })
+}
+
+function filteredFlights() {
+  return ST.flights.filter(f => {
+    if (f.alt > ST.filters.maxAlt) return false
+    if (f.spd > ST.filters.maxSpeed) return false
     return true
   })
 }
 
-// ── Map ──────────────────────────────────────────────────────────────
-let map, markers={}, activePopup=null
+function updateMarkers() {
+  const visible = filteredFlights()
+  const visIds = new Set(visible.map(f => f.id))
 
-function initMap(){
-  mapboxgl.accessToken = MAPBOX_TOKEN
-  map = new mapboxgl.Map({
-    container:'map',
-    style: MAP_STYLES.dark,
-    center:[0,30], zoom:2.5, pitch:0, bearing:0,
-    attributionControl:false, antialias:true
-  })
-  map.on('load',()=>{
-    map.setFog({color:'rgb(10,10,20)','high-color':'rgb(20,30,60)','horizon-blend':.02,'space-color':'rgb(5,5,15)','star-intensity':.6})
-    animateFlights()
-    setInterval(animateFlights, 7000)
-  })
-  map.on('zoom',()=>{ document.getElementById('zoom-val').textContent=map.getZoom().toFixed(1) })
-}
-
-function updateMarkers(){
-  const visible=filteredFlights()
-  const visIds=new Set(visible.map(f=>f.id))
-
-  // Remove stale markers
-  Object.keys(markers).forEach(id=>{
-    if(!visIds.has(id)){ markers[id].remove(); delete markers[id] }
+  // Remove stale
+  Object.keys(markers).forEach(id => {
+    if (!visIds.has(id)) { markers[id].remove(); delete markers[id] }
   })
 
-  visible.forEach(f=>{
-    const selected = f.id === state.selectedId
-    const fillColor = selected ? '#60a5fa' : '#3b82f6'
-    const glowColor = selected ? 'rgba(96,165,250,0.9)' : 'rgba(59,130,246,0.6)'
+  visible.forEach(f => {
+    const selected = f.id === ST.selectedId
+    const fill = selected ? '#93c5fd' : '#3b82f6'
+    const glow = selected ? 'drop-shadow(0 0 8px rgba(147,197,253,0.9))' : 'drop-shadow(0 0 4px rgba(59,130,246,0.6))'
 
-    if(markers[f.id]){
-      // Update position
-      markers[f.id].setLngLat([f.lon,f.lat])
-      // Rotate the INNER div, not the outer — Mapbox owns the outer transform
-      const inner = markers[f.id].getElement().querySelector('.plane-inner')
-      if(inner) inner.style.transform = `rotate(${f.hdg}deg)`
-      // Update colour
+    if (markers[f.id]) {
+      markers[f.id].setLngLat([f.lon, f.lat])
+      const inner = markers[f.id].getElement().querySelector('.pi')
+      if (inner) inner.style.transform = `rotate(${f.hdg}deg)`
       const svg = markers[f.id].getElement().querySelector('svg')
-      if(svg){
-        svg.setAttribute('fill', fillColor)
-        svg.style.filter = `drop-shadow(0 0 5px ${glowColor})`
-      }
+      if (svg) { svg.setAttribute('fill', fill); svg.style.filter = glow }
     } else {
-      // Outer div — Mapbox will apply its own translate transform here
-      const el = document.createElement('div')
-      el.style.cssText = `width:26px;height:26px;cursor:pointer;`
+      const outer = document.createElement('div')
+      outer.style.cssText = 'width:24px;height:24px;cursor:pointer'
 
-      // Inner div — we rotate this independently
       const inner = document.createElement('div')
-      inner.className = 'plane-inner'
-      inner.style.cssText = `width:26px;height:26px;transform:rotate(${f.hdg}deg);transition:transform 1.5s ease;display:flex;align-items:center;justify-content:center;`
-      inner.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="${fillColor}" style="filter:drop-shadow(0 0 5px ${glowColor});transition:fill .3s"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>`
+      inner.className = 'pi'
+      inner.style.cssText = `width:24px;height:24px;transform:rotate(${f.hdg}deg);transition:transform 2s ease;display:flex;align-items:center;justify-content:center`
+      inner.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="${fill}" style="filter:${glow};transition:fill .3s,filter .3s"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>`
 
-      el.appendChild(inner)
-
-      el.addEventListener('click', ()=>selectFlight(f.id))
-      el.addEventListener('mouseenter', ()=>{
-        if(activePopup) activePopup.remove()
+      outer.appendChild(inner)
+      outer.addEventListener('click', () => selectFlight(f.id))
+      outer.addEventListener('mouseenter', () => {
+        if (activePopup) activePopup.remove()
         activePopup = new mapboxgl.Popup({closeButton:false, offset:16})
           .setLngLat([f.lon, f.lat])
-          .setHTML(`<div class="tooltip-inner"><div class="tooltip-flight">${f.callsign}</div><div class="tooltip-route">${f.orig.iata} → ${f.dest.iata}</div><div class="tooltip-data">${fmtAlt(f.alt)} · ${fmtSpd(f.spd)} · ${f.acType.icao}</div></div>`)
+          .setHTML(`<div class="tt"><div class="tt-flight">${f.callsign}</div><div class="tt-route">${f.orig.iata} → ${f.dest.iata}</div><div class="tt-data">${fmtAlt(f.alt)} · ${fmtSpd(f.spd)}</div></div>`)
           .addTo(map)
       })
-      el.addEventListener('mouseleave', ()=>{ if(activePopup){ activePopup.remove(); activePopup=null } })
+      outer.addEventListener('mouseleave', () => { if (activePopup) { activePopup.remove(); activePopup = null } })
 
-      markers[f.id] = new mapboxgl.Marker({element:el, anchor:'center'}).setLngLat([f.lon,f.lat]).addTo(map)
+      markers[f.id] = new mapboxgl.Marker({element:outer, anchor:'center'}).setLngLat([f.lon,f.lat]).addTo(map)
     }
   })
 }
 
-// ── Unit formatting ──────────────────────────────────────────────────
-function fmtAlt(ft){
-  const u=state.settings.units
-  if(u==='metric') return `${Math.round(ft*.3048).toLocaleString()} m`
-  if(ft>=18000) return `FL${Math.round(ft/100)}`
-  return `${ft.toLocaleString()} ft`
-}
-function fmtSpd(kts){
-  const u=state.settings.units
-  if(u==='metric') return `${Math.round(kts*1.852)} km/h`
-  if(u==='imperial') return `${Math.round(kts*1.15)} mph`
-  return `${kts} kts`
-}
-function fmtTime(iso){ try{const d=new Date(iso);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch{return '--:--'} }
-function fmtFromNow(iso){
-  const diff=(new Date(iso)-Date.now())/60000
-  if(diff<0) return 'Landed'
-  if(diff<60) return `${Math.round(diff)}m`
-  return `${Math.floor(diff/60)}h ${Math.round(diff%60)}m`
-}
+// ─── Flight path ──────────────────────────────────────────────────────
+function drawPath(f) {
+  clearPath()
+  if (!map.isStyleLoaded()) return
 
-// ── Flight path on map ───────────────────────────────────────────────
-function drawFlightPath(f){
-  clearFlightPath()
-
-  // Build a curved great-circle-ish path: origin → current pos → destination
-  const points = interpolatePath(
-    [f.orig.lon, f.orig.lat],
-    [f.lon, f.lat],
-    [f.dest.lon, f.dest.lat],
-    60
-  )
-
-  const completedPoints = interpolatePath(
-    [f.orig.lon, f.orig.lat],
-    [f.lon, f.lat],
-    [f.lon, f.lat],
-    30
-  )
-
-  // Completed portion (dimmer)
-  if(!map.getSource('path-done')){
-    map.addSource('path-done', {type:'geojson', data:{type:'Feature',geometry:{type:'LineString',coordinates:completedPoints}}})
-    map.addLayer({id:'path-done', type:'line', source:'path-done', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#3b82f6','line-width':2,'line-opacity':0.35,'line-dasharray':[2,2]}})
-  } else {
-    map.getSource('path-done').setData({type:'Feature',geometry:{type:'LineString',coordinates:completedPoints}})
+  // Points: origin → current → destination
+  const makeLine = (a, b, steps=40) => {
+    const pts = []
+    for (let i=0; i<=steps; i++) {
+      const t = i/steps
+      pts.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t])
+    }
+    return pts
   }
 
-  // Remaining portion (brighter)
-  const remainingPoints = interpolatePath(
-    [f.lon, f.lat],
-    [f.dest.lon, f.dest.lat],
-    [f.dest.lon, f.dest.lat],
-    30
-  )
-  if(!map.getSource('path-remain')){
-    map.addSource('path-remain', {type:'geojson', data:{type:'Feature',geometry:{type:'LineString',coordinates:remainingPoints}}})
-    map.addLayer({id:'path-remain', type:'line', source:'path-remain', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#60a5fa','line-width':2,'line-opacity':0.7,'line-dasharray':[4,3]}})
-  } else {
-    map.getSource('path-remain').setData({type:'Feature',geometry:{type:'LineString',coordinates:remainingPoints}})
+  const cur = [f.lon, f.lat]
+  const ori = [f.orig.lon||0, f.orig.lat||0]
+  const dst = [f.dest.lon||0, f.dest.lat||0]
+
+  const donePts = (ori[0]||ori[1]) ? makeLine(ori, cur) : [cur, cur]
+  const remPts  = (dst[0]||dst[1]) ? makeLine(cur, dst) : [cur, cur]
+
+  const addLayer = (id, coords, color, opacity, dash) => {
+    if (!map.getSource(id)) {
+      map.addSource(id, {type:'geojson', data:{type:'Feature',geometry:{type:'LineString',coordinates:coords}}})
+      const paint = {'line-color':color,'line-width':2,'line-opacity':opacity}
+      if (dash) paint['line-dasharray'] = dash
+      map.addLayer({id, type:'line', source:id, layout:{'line-cap':'round','line-join':'round'}, paint})
+    } else {
+      map.getSource(id).setData({type:'Feature',geometry:{type:'LineString',coordinates:coords}})
+    }
   }
 
-  // Airport dot markers
-  const airports = {type:'FeatureCollection', features:[
-    {type:'Feature', geometry:{type:'Point', coordinates:[f.orig.lon, f.orig.lat]}, properties:{label:f.orig.iata}},
-    {type:'Feature', geometry:{type:'Point', coordinates:[f.dest.lon, f.dest.lat]}, properties:{label:f.dest.iata}},
-  ]}
-  if(!map.getSource('path-airports')){
-    map.addSource('path-airports', {type:'geojson', data:airports})
-    map.addLayer({id:'path-airports-circle', type:'circle', source:'path-airports', paint:{'circle-radius':5,'circle-color':'#1e293b','circle-stroke-width':2,'circle-stroke-color':'#60a5fa','circle-opacity':0.9}})
-    map.addLayer({id:'path-airports-label', type:'symbol', source:'path-airports', layout:{'text-field':['get','label'],'text-size':11,'text-offset':[0,-1.2],'text-anchor':'bottom','text-font':['DIN Offc Pro Medium','Arial Unicode MS Bold']}, paint:{'text-color':'#e2e8f0','text-halo-color':'#0f1117','text-halo-width':2}})
-  } else {
-    map.getSource('path-airports').setData(airports)
+  addLayer('path-done', donePts, '#3b82f6', 0.4, [2,3])
+  addLayer('path-rem',  remPts,  '#60a5fa', 0.75, [4,3])
+
+  // Airport labels if we have real coords
+  const features = []
+  if (f.orig.lon||f.orig.lat) features.push({type:'Feature',geometry:{type:'Point',coordinates:ori},properties:{label:f.orig.iata}})
+  if (f.dest.lon||f.dest.lat) features.push({type:'Feature',geometry:{type:'Point',coordinates:dst},properties:{label:f.dest.iata}})
+
+  if (features.length) {
+    const fc = {type:'FeatureCollection',features}
+    if (!map.getSource('path-ap')) {
+      map.addSource('path-ap', {type:'geojson',data:fc})
+      map.addLayer({id:'path-ap-c',type:'circle',source:'path-ap',paint:{'circle-radius':5,'circle-color':'#0f1117','circle-stroke-width':2,'circle-stroke-color':'#60a5fa'}})
+      map.addLayer({id:'path-ap-l',type:'symbol',source:'path-ap',layout:{'text-field':['get','label'],'text-size':11,'text-offset':[0,-1.2],'text-anchor':'bottom','text-font':['DIN Offc Pro Medium','Arial Unicode MS Bold']},paint:{'text-color':'#e2e8f0','text-halo-color':'#0f1117','text-halo-width':2}})
+    } else {
+      map.getSource('path-ap').setData(fc)
+    }
   }
 }
 
-// Generate interpolated path points between positions
-function interpolatePath(start, mid, end, steps){
-  const pts = []
-  // Start → mid
-  for(let i=0; i<=steps/2; i++){
-    const t = i / (steps/2)
-    pts.push([
-      start[0] + (mid[0]-start[0])*t,
-      start[1] + (mid[1]-start[1])*t,
-    ])
-  }
-  // Mid → end
-  for(let i=1; i<=steps/2; i++){
-    const t = i / (steps/2)
-    pts.push([
-      mid[0] + (end[0]-mid[0])*t,
-      mid[1] + (end[1]-mid[1])*t,
-    ])
-  }
-  return pts
+function clearPath() {
+  ['path-ap-l','path-ap-c','path-rem','path-done'].forEach(id => { try { map.removeLayer(id) } catch(_){} })
+  ;['path-ap','path-rem','path-done'].forEach(id => { try { map.removeSource(id) } catch(_){} })
 }
 
-function clearFlightPath(){
-  ['path-airports-label','path-airports-circle','path-remain','path-done'].forEach(id=>{
-    if(map.getLayer(id)) map.removeLayer(id)
-  })
-  ;['path-airports','path-remain','path-done'].forEach(id=>{
-    if(map.getSource(id)) map.removeSource(id)
-  })
-}
-
-// ── Selection ────────────────────────────────────────────────────────
-function selectFlight(id){
-  state.selectedId=id
+// ─── Selection ────────────────────────────────────────────────────────
+function selectFlight(id) {
+  ST.selectedId = id
+  const f = ST.flights.find(x => x.id === id)
+  if (!f) return
   updateMarkers()
-  const f=flights.find(x=>x.id===id)
-  if(!f) return
-  map.flyTo({center:[f.lon,f.lat],zoom:Math.max(map.getZoom(),6),duration:900,essential:true})
-  drawFlightPath(f)
+  map.flyTo({center:[f.lon,f.lat], zoom:Math.max(map.getZoom(),6), duration:900, essential:true})
+  drawPath(f)
   openPanel(f)
-  if(state.activeTab==='live') renderLiveList()
+  if (ST.activeTab === 'live') renderLiveList()
 }
 
-function openPanel(f){
-  document.getElementById('panel-flight-num').textContent=f.callsign
-  document.getElementById('panel-airline-name').textContent=`${flag(f.airline.cc)} ${f.airline.name}`
+function closePanel() {
+  document.getElementById('dp').classList.remove('open')
+  ST.selectedId = null
+  clearPath()
+  updateMarkers()
+  if (ST.activeTab === 'live') renderLiveList()
+}
 
-  const isTracked=state.tracked.includes(f.id)
-  const statusCls={enroute:'status-enroute',boarding:'status-boarding',delayed:'status-delayed',landed:'status-landed',approaching:'status-enroute',cancelled:'status-cancelled'}
+function openPanel(f) {
+  document.getElementById('p-fn').textContent = f.callsign
+  document.getElementById('p-an').textContent = `${FLAG(f.airline.cc)} ${f.airline.name}`
 
-  document.getElementById('panel-body').innerHTML=`
+  const isSaved = ST.saved.includes(f.id)
+  const sCls = {enroute:'s-er',boarding:'s-bd',delayed:'s-dl',landed:'s-ld',cancelled:'s-cn',approaching:'s-er'}
+  const sLbl = {enroute:'En Route',boarding:'Boarding',delayed:'Delayed',landed:'Landed',cancelled:'Cancelled',approaching:'Approaching'}
+
+  document.getElementById('p-body').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <span class="status-badge ${statusCls[f.status]||'status-enroute'}">${STATUS_LABELS[f.status]||'En Route'}</span>
-      <span style="font-size:12px">${flag(f.airline.cc)} ${f.airline.iata}</span>
+      <span class="sbadge ${sCls[f.status]||'s-er'}">${sLbl[f.status]||'En Route'}</span>
+      <span style="font-size:12px">${FLAG(f.airline.cc)} ${f.airline.iata}</span>
     </div>
 
-    <div class="route-card">
-      <div class="route-row">
-        <div class="route-airport">
-          <div class="route-iata">${f.orig.iata}</div>
-          <div class="route-city">${f.orig.city}</div>
+    <div class="rcard">
+      <div class="rrow">
+        <div class="rap">
+          <div class="riata">${f.orig.iata}</div>
+          <div class="rcity">${f.orig.city}</div>
         </div>
-        <div class="route-mid">
-          <div class="route-plane">✈</div>
-          <div class="route-line-wrap">
-            <div class="route-done" style="width:${f.progress}%"></div>
-            <div class="route-remain"></div>
+        <div class="rmid">
+          <div class="rplane">✈</div>
+          <div class="rlw">
+            <div class="rdone" style="width:${f.progress}%"></div>
+            <div class="rrem"></div>
           </div>
-          <div class="route-pct">${f.progress}%</div>
+          <div class="rpct">${f.progress}%</div>
         </div>
-        <div class="route-airport" style="text-align:right">
-          <div class="route-iata">${f.dest.iata}</div>
-          <div class="route-city">${f.dest.city}</div>
-          <div class="route-time">${fmtTime(f.eta)}</div>
+        <div class="rap" style="text-align:right">
+          <div class="riata">${f.dest.iata}</div>
+          <div class="rcity">${f.dest.city}</div>
+          ${f.eta ? `<div class="rtime">${fmtTime(f.eta)}</div>` : ''}
         </div>
       </div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${f.progress}%"></div></div>
+      <div class="pbar"><div class="pfill" style="width:${f.progress}%"></div></div>
     </div>
 
-    <div class="tiles-grid">
-      <div class="tile">
-        <div class="tile-label"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Altitude</div>
-        <div class="tile-value">${fmtAlt(f.alt)}</div>
-      </div>
-      <div class="tile">
-        <div class="tile-label"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Speed</div>
-        <div class="tile-value">${fmtSpd(f.spd)}</div>
-      </div>
-      <div class="tile">
-        <div class="tile-label"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Heading</div>
-        <div class="tile-value">${Math.round(f.hdg)}°</div>
-      </div>
-      <div class="tile">
-        <div class="tile-label"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg>V/Rate</div>
-        <div class="tile-value ${f.vrate>100?'up':f.vrate<-100?'down':''}">${f.vrate>0?'+':''}${Math.round(f.vrate)} fpm</div>
-      </div>
-      <div class="tile">
-        <div class="tile-label"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>ETA</div>
-        <div class="tile-value" style="font-size:11px">${fmtFromNow(f.eta)}</div>
-      </div>
-      <div class="tile">
-        <div class="tile-label"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Distance</div>
-        <div class="tile-value" style="font-size:11px">${f.distNm.toLocaleString()} nm</div>
-      </div>
+    <div class="tgrid">
+      <div class="tile"><div class="tlbl"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Altitude</div><div class="tval">${fmtAlt(f.alt)}</div></div>
+      <div class="tile"><div class="tlbl"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Speed</div><div class="tval">${fmtSpd(f.spd)}</div></div>
+      <div class="tile"><div class="tlbl"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Heading</div><div class="tval">${Math.round(f.hdg)}°</div></div>
+      <div class="tile"><div class="tlbl"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg>V/Rate</div><div class="tval ${f.vrate>100?'up':f.vrate<-100?'dn':''}">${f.vrate>0?'+':''}${Math.round(f.vrate)} fpm</div></div>
+      ${f.eta?`<div class="tile"><div class="tlbl"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>ETA</div><div class="tval" style="font-size:11px">${fmtFromNow(f.eta)}</div></div>`:''}
+      ${f.distNm?`<div class="tile"><div class="tlbl"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Distance</div><div class="tval" style="font-size:11px">${f.distNm.toLocaleString()} nm</div></div>`:''}
     </div>
 
-    <div class="section-label">Aircraft</div>
-    <div class="info-card">
-      ${[['Type',f.acType.name],['Registration',f.reg],['ICAO24',f.icao24],['Squawk',f.squawk],['Age',f.age+' years'],['Operator',f.airline.name]].map(([k,v])=>`<div class="info-row"><span class="info-key">${k}</span><span class="info-val">${v}</span></div>`).join('')}
+    <div class="slbl">Aircraft</div>
+    <div class="icard">
+      ${[['ICAO24',f.icao24],['Callsign',f.callsign],['Type',f.acType.name],['Squawk',f.squawk],['Airline',f.airline.name]].map(([k,v])=>`<div class="irow"><span class="ik">${k}</span><span class="iv">${v}</span></div>`).join('')}
     </div>
 
-    <div class="section-label">Conditions at cruise</div>
-    <div class="weather-card">
-      <div class="weather-top">
-        <span class="weather-desc">${f.weather.desc}</span>
-        <span class="weather-temp">${f.weather.temp}°C</span>
-      </div>
-      <div class="weather-details">Wind ${f.weather.wind} kts at ${f.weather.windDir}°</div>
-    </div>
+    ${f.isLive ? '<div style="font-size:10px;color:var(--muted);text-align:center;padding:4px">📡 Live data from OpenSky Network</div>' : '<div style="font-size:10px;color:var(--orange);text-align:center;padding:4px">⚠ Demo data — OpenSky unavailable</div>'}
   `
 
-  document.getElementById('panel-actions').innerHTML=`
-    <button class="action-btn primary ${isTracked?'active':''}" id="track-btn" onclick="toggleTrack('${f.id}')">
+  document.getElementById('p-actions').innerHTML = `
+    <button class="abtn primary ${isSaved?'on':''}" onclick="toggleSave('${f.id}')">
       <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      ${isTracked?'Saved':'Save'}
+      ${isSaved?'Saved':'Save'}
     </button>
-    <button class="action-btn" onclick="shareFlightURL('${f.callsign}')">
+    <button class="abtn" onclick="toast('Link copied!');navigator.clipboard?.writeText(location.href+'?f='+encodeURIComponent('${f.callsign}'))">
       <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
       Share
     </button>
   `
 
-  document.getElementById('detail-panel').classList.add('open')
+  document.getElementById('dp').classList.add('open')
 }
 
-function closePanel(){
-  document.getElementById('detail-panel').classList.remove('open')
-  state.selectedId=null
-  clearFlightPath()
-  updateMarkers()
-  if(state.activeTab==='live') renderLiveList()
+function toggleSave(id) {
+  const idx = ST.saved.indexOf(id)
+  if (idx > -1) ST.saved.splice(idx, 1)
+  else ST.saved.push(id)
+  localStorage.setItem('st_saved', JSON.stringify(ST.saved))
+  const f = ST.flights.find(x => x.id === id)
+  if (f) openPanel(f)
 }
 
-function toggleTrack(id){
-  const idx=state.tracked.indexOf(id)
-  if(idx>-1) state.tracked.splice(idx,1)
-  else state.tracked.push(id)
-  localStorage.setItem('skytrace_tracked',JSON.stringify(state.tracked))
-  const f=flights.find(x=>x.id===id)
-  if(f) openPanel(f)
-}
-
-function shareFlightURL(callsign){
-  const url=`${location.origin}${location.pathname}?flight=${callsign}`
-  navigator.clipboard?.writeText(url).then(()=>showToast('Link copied to clipboard'))
-}
-
-function showToast(msg){
-  const t=document.createElement('div')
-  t.style.cssText='position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:8px 16px;font-size:12px;z-index:999;backdrop-filter:blur(12px);'
-  t.textContent=msg; document.body.appendChild(t)
-  setTimeout(()=>t.remove(),2500)
-}
-
-// ── Sidebar ──────────────────────────────────────────────────────────
-function setTab(tab, el){
-  state.activeTab=tab
-  document.querySelectorAll('.sidebar-tab').forEach(t=>t.classList.remove('active'))
+// ─── Sidebar ──────────────────────────────────────────────────────────
+function setTab(tab, el) {
+  ST.activeTab = tab
+  document.querySelectorAll('.sb-tab').forEach(t => t.classList.remove('active'))
   el.classList.add('active')
   renderSidebar()
 }
 
-function renderSidebar(){
-  const c=document.getElementById('sidebar-content')
-  if(state.activeTab==='live') renderLiveList()
-  else if(state.activeTab==='filters') renderFilters()
-  else if(state.activeTab==='airports') renderAirportsList()
-  else if(state.activeTab==='saved') renderSavedList()
+function renderSidebar() {
+  if (ST.activeTab === 'live') renderLiveList()
+  else if (ST.activeTab === 'filters') renderFilters()
+  else if (ST.activeTab === 'airports') renderAirportsList()
+  else if (ST.activeTab === 'saved') renderSavedList()
 }
 
-function renderLiveList(){
-  const list=filteredFlights().slice(0,60)
-  const c=document.getElementById('sidebar-content')
-  if(state.activeTab!=='live') return
-  c.innerHTML=`
+function renderLiveList() {
+  if (ST.activeTab !== 'live') return
+  const list = filteredFlights().slice(0, 80)
+  document.getElementById('sb-body').innerHTML = `
     <div class="live-bar">
-      <div class="live-indicator"><div class="live-dot"></div><span class="live-label">Live</span></div>
-      <span class="live-count">${flights.length.toLocaleString()} tracked</span>
+      <div class="live-ind"><div class="live-dot"></div><span class="live-lbl">${ST.useLive?'Live':'Demo'}</span></div>
+      <span class="live-cnt">${ST.flights.length.toLocaleString()} tracked</span>
     </div>
     ${list.map(f=>`
-      <div class="flight-item ${f.id===state.selectedId?'selected':''}" onclick="selectFlight('${f.id}')">
-        <div class="fi-top">
-          <span class="fi-callsign">${f.callsign}</span>
-          <span class="fi-airline">${flag(f.airline.cc)} ${f.airline.iata}</span>
-        </div>
+      <div class="fi ${f.id===ST.selectedId?'sel':''}" onclick="selectFlight('${f.id}')">
+        <div class="fi-top"><span class="fi-cs">${f.callsign}</span><span class="fi-al">${FLAG(f.airline.cc)} ${f.airline.iata}</span></div>
         <div class="fi-route">
           <span class="fi-iata">${f.orig.iata}</span>
-          <div class="fi-progress-bar">
-            <div class="fi-progress-fill" style="width:${f.progress}%"></div>
-            <div class="fi-dot" style="left:${f.progress}%"></div>
-          </div>
+          <div class="fi-bar"><div class="fi-fill" style="width:${f.progress}%"></div><div class="fi-dot" style="left:${f.progress}%"></div></div>
           <span class="fi-iata">${f.dest.iata}</span>
         </div>
-        <div class="fi-stats">
-          <span>${fmtAlt(f.alt)}</span>
-          <span>·</span>
-          <span>${fmtSpd(f.spd)}</span>
-          <span>·</span>
-          <span>${f.acType.icao}</span>
-        </div>
+        <div class="fi-stats"><span>${fmtAlt(f.alt)}</span><span>·</span><span>${fmtSpd(f.spd)}</span><span>·</span><span>${f.icao24}</span></div>
       </div>
     `).join('')}
   `
 }
 
-function renderFilters(){
-  const c=document.getElementById('sidebar-content')
-  const cats=['passenger','cargo','private','military','helicopter']
-  c.innerHTML=`
-    <div class="filter-section">
-      <div class="filter-title">Filters <button class="filter-reset" onclick="resetFilters()">Reset all</button></div>
-      <div class="filter-label">Category</div>
-      <div class="filter-chips">
-        ${cats.map(cat=>`<button class="chip ${state.filters.categories.includes(cat)?'active':''}" onclick="toggleCategory('${cat}',this)">${cat.charAt(0).toUpperCase()+cat.slice(1)}</button>`).join('')}
+function renderFilters() {
+  document.getElementById('sb-body').innerHTML = `
+    <div class="f-sec">
+      <div class="f-title">Filters <button class="f-reset" onclick="resetFilters()">Reset</button></div>
+      <div class="f-lbl">Max Altitude</div>
+      <div class="f-sw">
+        <div class="f-sh"><span></span><span class="f-sv" id="fav">${(ST.filters.maxAlt/1000).toFixed(0)}k ft</span></div>
+        <input type="range" min="0" max="60000" step="1000" value="${ST.filters.maxAlt}" oninput="ST.filters.maxAlt=+this.value;document.getElementById('fav').textContent=(+this.value/1000).toFixed(0)+'k ft';updateMarkers()"/>
       </div>
-      <div class="filter-slider-wrap">
-        <div class="filter-slider-head">
-          <span class="filter-label" style="margin:0">Max Altitude</span>
-          <span class="filter-slider-val" id="alt-val">${(state.filters.maxAlt/1000).toFixed(0)}k ft</span>
-        </div>
-        <input type="range" min="0" max="60000" step="1000" value="${state.filters.maxAlt}" oninput="state.filters.maxAlt=+this.value;document.getElementById('alt-val').textContent=(+this.value/1000).toFixed(0)+'k ft';updateMarkers()" />
-      </div>
-      <div class="filter-slider-wrap">
-        <div class="filter-slider-head">
-          <span class="filter-label" style="margin:0">Max Speed</span>
-          <span class="filter-slider-val" id="spd-val">${state.filters.maxSpeed} kts</span>
-        </div>
-        <input type="range" min="0" max="700" step="10" value="${state.filters.maxSpeed}" oninput="state.filters.maxSpeed=+this.value;document.getElementById('spd-val').textContent=+this.value+' kts';updateMarkers()" />
+      <div class="f-lbl">Max Speed</div>
+      <div class="f-sw">
+        <div class="f-sh"><span></span><span class="f-sv" id="fsv">${ST.filters.maxSpeed} kts</span></div>
+        <input type="range" min="0" max="700" step="10" value="${ST.filters.maxSpeed}" oninput="ST.filters.maxSpeed=+this.value;document.getElementById('fsv').textContent=+this.value+' kts';updateMarkers()"/>
       </div>
     </div>
   `
 }
 
-function toggleCategory(cat, el){
-  const idx=state.filters.categories.indexOf(cat)
-  if(idx>-1) state.filters.categories.splice(idx,1)
-  else state.filters.categories.push(cat)
-  el.classList.toggle('active')
-  updateMarkers()
+function resetFilters() {
+  ST.filters = {cats:[], maxAlt:60000, maxSpeed:700}
+  updateMarkers(); renderFilters()
 }
 
-function resetFilters(){
-  state.filters={categories:[],maxAlt:60000,maxSpeed:700}
-  updateMarkers()
-  renderFilters()
-}
-
-function renderAirportsList(){
-  const c=document.getElementById('sidebar-content')
-  c.innerHTML=`
-    <div style="padding:4px">
-      ${AIRPORTS.map(a=>`
-        <div class="flight-item" onclick="openAirportModal('${a.icao}');flyToAirport(${a.lat},${a.lon})">
-          <div class="fi-top">
-            <span class="fi-callsign">${a.iata}</span>
-            <span class="fi-airline">${flag(a.cc)}</span>
-          </div>
-          <div style="font-size:12px;color:var(--text);margin-bottom:3px">${a.name}</div>
-          <div style="font-size:11px;color:var(--muted)">${a.city}, ${a.cc}</div>
-        </div>
-      `).join('')}
+function renderAirportsList() {
+  document.getElementById('sb-body').innerHTML = AIRPORTS.map(a=>`
+    <div class="fi" onclick="openAirportModal('${a.icao}');map.flyTo({center:[${a.lon},${a.lat}],zoom:9,duration:1000})">
+      <div class="fi-top"><span class="fi-cs">${a.iata}</span><span class="fi-al">${FLAG(a.cc)}</span></div>
+      <div style="font-size:12px;margin-bottom:3px">${a.name}</div>
+      <div style="font-size:11px;color:var(--muted)">${a.city}</div>
     </div>
-  `
+  `).join('')
 }
 
-function flyToAirport(lat,lon){
-  map.flyTo({center:[lon,lat],zoom:8,duration:1000,essential:true})
-}
-
-function renderSavedList(){
-  const c=document.getElementById('sidebar-content')
-  const saved=state.tracked.map(id=>flights.find(f=>f.id===id)).filter(Boolean)
-  if(!saved.length){
-    c.innerHTML=`<div class="empty-state">
-      <div class="empty-icon"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
-      <p class="empty-text">Save flights by clicking the star icon in the detail panel</p>
-    </div>` ; return
+function renderSavedList() {
+  const saved = ST.saved.map(id => ST.flights.find(f=>f.id===id)).filter(Boolean)
+  if (!saved.length) {
+    document.getElementById('sb-body').innerHTML = `<div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><p class="empty-txt">Save flights using the star button in the detail panel</p></div>`
+    return
   }
-  c.innerHTML=saved.map(f=>`
-    <div class="flight-item" onclick="selectFlight('${f.id}')">
-      <div class="fi-top"><span class="fi-callsign">${f.callsign}</span><span class="fi-airline">${flag(f.airline.cc)}</span></div>
+  document.getElementById('sb-body').innerHTML = saved.map(f=>`
+    <div class="fi ${f.id===ST.selectedId?'sel':''}" onclick="selectFlight('${f.id}')">
+      <div class="fi-top"><span class="fi-cs">${f.callsign}</span><span class="fi-al">${FLAG(f.airline.cc)}</span></div>
       <div class="fi-route">
         <span class="fi-iata">${f.orig.iata}</span>
-        <div class="fi-progress-bar"><div class="fi-progress-fill" style="width:${f.progress}%"></div></div>
+        <div class="fi-bar"><div class="fi-fill" style="width:${f.progress}%"></div></div>
         <span class="fi-iata">${f.dest.iata}</span>
       </div>
     </div>
   `).join('')
 }
 
-// ── Search ───────────────────────────────────────────────────────────
-const searchInput=document.getElementById('search-input')
-const searchDropdown=document.getElementById('search-dropdown')
-const searchClear=document.getElementById('search-clear')
+// ─── Search ───────────────────────────────────────────────────────────
+const siEl = document.getElementById('si')
+const sdEl = document.getElementById('sd')
+const scEl = document.getElementById('sc')
 
-searchInput.addEventListener('input',()=>{
-  const q=searchInput.value.trim()
-  searchClear.style.display=q?'block':'none'
-  if(q.length<2){searchDropdown.classList.remove('open');return}
-  runSearch(q)
+siEl.addEventListener('input', () => {
+  const q = siEl.value.trim()
+  scEl.style.display = q ? 'block' : 'none'
+  if (q.length < 2) { sdEl.innerHTML=''; sdEl.classList.remove('open'); return }
+  doSearch(q)
 })
-searchInput.addEventListener('focus',()=>{
-  if(searchInput.value.trim().length>=2) searchDropdown.classList.add('open')
-})
-document.addEventListener('click',e=>{
-  if(!document.getElementById('search-wrap').contains(e.target)) searchDropdown.classList.remove('open')
-})
+siEl.addEventListener('focus', () => { if (siEl.value.trim().length>=2) sdEl.classList.add('open') })
+document.addEventListener('click', e => { if (!document.getElementById('sw').contains(e.target)) sdEl.classList.remove('open') })
 
-function clearSearch(){
-  searchInput.value=''; searchClear.style.display='none'
-  searchDropdown.innerHTML=''; searchDropdown.classList.remove('open')
+function clearSearch() {
+  siEl.value=''; scEl.style.display='none'; sdEl.innerHTML=''; sdEl.classList.remove('open')
 }
 
-function runSearch(q){
-  const ql=q.toLowerCase()
-  const flightResults=flights.filter(f=>f.callsign.toLowerCase().includes(ql)||f.reg.toLowerCase().includes(ql)).slice(0,4)
-  const airportResults=AIRPORTS.filter(a=>a.name.toLowerCase().includes(ql)||a.iata.toLowerCase().includes(ql)||a.icao.toLowerCase().includes(ql)||a.city.toLowerCase().includes(ql)).slice(0,4)
-  const airlineResults=AIRLINES.filter(al=>al.name.toLowerCase().includes(ql)||al.iata.toLowerCase().includes(ql)).slice(0,3)
+function doSearch(q) {
+  const ql = q.toLowerCase()
+  const fRes = ST.flights.filter(f=>f.callsign.toLowerCase().includes(ql)||f.icao24.toLowerCase().includes(ql)).slice(0,5)
+  const aRes = AIRPORTS.filter(a=>a.name.toLowerCase().includes(ql)||a.iata.toLowerCase().includes(ql)||a.icao.toLowerCase().includes(ql)||a.city.toLowerCase().includes(ql)).slice(0,4)
 
-  let html=''
-  if(flightResults.length){
-    html+=`<div class="dropdown-section-label">Flights</div>`
-    html+=flightResults.map(f=>`
-      <div class="search-result" onclick="selectFlight('${f.id}');searchDropdown.classList.remove('open')">
-        <div class="result-icon"><svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="var(--blue)"/></svg></div>
-        <div><div class="result-title">${f.callsign}</div><div class="result-sub">${f.orig.iata} → ${f.dest.iata} · ${f.acType.name}</div></div>
-      </div>`).join('')
+  let html = ''
+  if (fRes.length) {
+    html += `<div class="ds-label">Flights</div>`
+    html += fRes.map(f=>`<div class="dr" onclick="selectFlight('${f.id}');sdEl.classList.remove('open')"><div class="dr-icon"><svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="var(--blue)"/></svg></div><div><div class="dr-t">${f.callsign}</div><div class="dr-s">${f.orig.iata} → ${f.dest.iata}</div></div></div>`).join('')
   }
-  if(airportResults.length){
-    html+=`<div class="dropdown-section-label">Airports</div>`
-    html+=airportResults.map(a=>`
-      <div class="search-result" onclick="openAirportModal('${a.icao}');flyToAirport(${a.lat},${a.lon});searchDropdown.classList.remove('open')">
-        <div class="result-icon"><svg viewBox="0 0 24 24" stroke="var(--muted)" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
-        <div><div class="result-title">${a.iata} · ${a.name}</div><div class="result-sub">${a.city}, ${a.cc}</div></div>
-      </div>`).join('')
+  if (aRes.length) {
+    html += `<div class="ds-label">Airports</div>`
+    html += aRes.map(a=>`<div class="dr" onclick="openAirportModal('${a.icao}');map.flyTo({center:[${a.lon},${a.lat}],zoom:9,duration:1000});sdEl.classList.remove('open')"><div class="dr-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div><div><div class="dr-t">${a.iata} · ${a.name}</div><div class="dr-s">${a.city} ${FLAG(a.cc)}</div></div></div>`).join('')
   }
-  if(airlineResults.length){
-    html+=`<div class="dropdown-section-label">Airlines</div>`
-    html+=airlineResults.map(al=>`
-      <div class="search-result">
-        <div class="result-icon"><svg viewBox="0 0 24 24" stroke="var(--muted)" fill="none" stroke-width="2"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19.5 2.5S18 2 16.5 3.5L13 7l-8.2-1.8L3 7l7 4-2 3H6l-1 1 3 2 2 3 1-1v-2l3-2 4 7 2-1-1.8-8.2z"/></svg></div>
-        <div><div class="result-title">${al.name}</div><div class="result-sub">${al.iata} · ${flag(al.cc)}</div></div>
-      </div>`).join('')
-  }
-  if(!html) html=`<div class="no-results">No results for "${q}"</div>`
-  searchDropdown.innerHTML=html
-  searchDropdown.classList.add('open')
+  if (!html) html = `<div class="no-res">No results for "${q}"</div>`
+  sdEl.innerHTML = html
+  sdEl.classList.add('open')
 }
 
-// ── Airport modal ────────────────────────────────────────────────────
-function openAirportModal(icao){
-  state.currentAirportIcao=icao
-  const ap=AIRPORTS.find(a=>a.icao===icao)
-  document.getElementById('modal-airport-name').textContent=ap?`${ap.iata} · ${ap.name}`:icao
-  document.getElementById('modal-airport-sub').textContent=ap?`${flag(ap.cc)} ${ap.city}, ${ap.cc} · ICAO: ${ap.icao}`:''
-  document.getElementById('airport-modal').classList.add('open')
-  setAirportTab('departures', document.querySelector('.modal-tab'))
+// ─── Airport modal ────────────────────────────────────────────────────
+function openAirportModal(icao) {
+  ST.airportIcao = icao
+  const ap = AIRPORTS.find(a=>a.icao===icao)
+  document.getElementById('m-name').textContent = ap ? `${ap.iata} · ${ap.name}` : icao
+  document.getElementById('m-sub').textContent = ap ? `${FLAG(ap.cc)} ${ap.city} · ${ap.icao}` : ''
+  document.getElementById('am').classList.add('open')
+  setAirportTab('dep', document.querySelector('.mtab'))
+}
+function closeAirportModal() { document.getElementById('am').classList.remove('open') }
+
+function setAirportTab(tab, el) {
+  ST.airportTab = tab
+  document.querySelectorAll('.mtab').forEach(t=>t.classList.remove('active'))
+  if (el) el.classList.add('active')
+  renderBoard()
 }
 
-function closeAirportModal(){ document.getElementById('airport-modal').classList.remove('open') }
-
-function setAirportTab(tab, el){
-  state.currentAirportTab=tab
-  document.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'))
-  if(el) el.classList.add('active')
-  renderAirportBoard()
-}
-
-function renderAirportBoard(){
-  const ap=AIRPORTS.find(a=>a.icao===state.currentAirportIcao)
-  const isDep=state.currentAirportTab==='departures'
-  const rows=Array.from({length:14},(_,i)=>{
-    const al=pick(AIRLINES), peer=pick(AIRPORTS.filter(a=>a.icao!==state.currentAirportIcao))
-    const t=new Date(Date.now()+rand(-90,240)*60000)
-    const delay=Math.random()>.72?randi(5,75):0
-    const statuses=isDep?['Scheduled','Boarding','Departed','Delayed']:['En Route','Approaching','Landed','Delayed']
-    return {al,peer,t,delay,status:delay?'Delayed':pick(statuses),gate:`${String.fromCharCode(65+randi(0,8))}${randi(1,30)}`,flight:`${al.iata}${randi(100,9999)}`}
+function renderBoard() {
+  const isDep = ST.airportTab === 'dep'
+  const sList = Object.values(AIRLINE_MAP)
+  const rows = Array.from({length:14}, (_,i) => {
+    const al = PK(sList)
+    const peer = PK(AIRPORTS.filter(a=>a.icao!==ST.airportIcao))
+    const t = new Date(Date.now()+R(-90,240)*60000)
+    const delay = Math.random()>.72 ? RI(5,75) : 0
+    const statuses = isDep ? ['Scheduled','Boarding','Departed','Delayed'] : ['En Route','Approaching','Landed','Delayed']
+    return {al, peer, t, delay, status:delay?'Delayed':PK(statuses), gate:`${String.fromCharCode(65+RI(0,8))}${RI(1,30)}`, fn:`${al.iata}${RI(100,9999)}`}
   })
-  const statusCls={'Delayed':'status-delayed','Landed':'status-landed','Boarding':'status-boarding','En Route':'status-enroute','Approaching':'status-enroute','Departed':'status-enroute','Scheduled':'status-boarding'}
-  document.getElementById('modal-board').innerHTML=`
-    <table class="board-table">
-      <thead><tr>
-        <th>Flight</th><th>${isDep?'To':'From'}</th><th>Time</th><th>Gate</th><th>Status</th>
-      </tr></thead>
+  const sCls = {Delayed:'s-dl',Landed:'s-ld',Boarding:'s-bd','En Route':'s-er',Approaching:'s-er',Departed:'s-er',Scheduled:'s-bd'}
+  document.getElementById('m-board').innerHTML = `
+    <table>
+      <thead><tr><th>Flight</th><th>${isDep?'To':'From'}</th><th>Time</th><th>Gate</th><th>Status</th></tr></thead>
       <tbody>
         ${rows.map(r=>`<tr>
-          <td><div style="font-weight:600">${r.flight}</div><div style="font-size:10px;color:var(--muted)">${r.al.name}</div></td>
+          <td><div style="font-weight:600">${r.fn}</div><div style="font-size:10px;color:var(--muted)">${r.al.name}</div></td>
           <td><div style="font-weight:500">${r.peer.iata}</div><div style="font-size:10px;color:var(--muted)">${r.peer.city}</div></td>
-          <td><div class="td-mono">${fmtTime(r.t.toISOString())}</div>${r.delay?`<div class="delay-red">+${r.delay}m</div>`:''}</td>
-          <td class="td-mono">${r.gate}</td>
-          <td><span class="status-badge ${statusCls[r.status]||'status-enroute'}">${r.status}</span></td>
+          <td><div class="tmono">${fmtTime(r.t.toISOString())}</div>${r.delay?`<div class="dly">+${r.delay}m</div>`:''}</td>
+          <td class="tmono">${r.gate}</td>
+          <td><span class="sbadge ${sCls[r.status]||'s-er'}">${r.status}</span></td>
         </tr>`).join('')}
       </tbody>
     </table>
   `
 }
 
-// ── Settings ─────────────────────────────────────────────────────────
-function openSettings(){ document.getElementById('settings-modal').classList.add('open') }
-function closeSettings(){ document.getElementById('settings-modal').classList.remove('open') }
+// ─── Settings ─────────────────────────────────────────────────────────
+function openSettings() { document.getElementById('sm').classList.add('open') }
+function closeSettings() { document.getElementById('sm').classList.remove('open') }
 
-function setMapStyle(style, el){
-  state.settings.mapStyle=style
-  document.querySelectorAll('#map-style-opts .opt-btn').forEach(b=>b.classList.remove('active'))
+function setMapStyle(style, el) {
+  ST.settings.mapStyle = style
+  document.querySelectorAll('#style-opts .obtn').forEach(b=>b.classList.remove('active'))
   el.classList.add('active')
   map.setStyle(MAP_STYLES[style])
-  map.once('styledata',()=>{ updateMarkers() })
+  map.once('styledata', () => updateMarkers())
+  toast(`Map: ${style}`)
 }
 
-function setUnits(units, el){
-  state.settings.units=units
-  document.querySelectorAll('#units-opts .opt-btn').forEach(b=>b.classList.remove('active'))
+function setUnits(units, el) {
+  ST.settings.units = units
+  document.querySelectorAll('#unit-opts .obtn').forEach(b=>b.classList.remove('active'))
   el.classList.add('active')
-  if(state.selectedId){ const f=flights.find(x=>x.id===state.selectedId); if(f)openPanel(f) }
   renderSidebar()
+  if (ST.selectedId) { const f=ST.flights.find(x=>x.id===ST.selectedId); if(f) openPanel(f) }
 }
 
-function toggleSetting(key, el){
-  state.settings[key]=!state.settings[key]
-  el.classList.toggle('on', state.settings[key])
+function toggleLive(el) {
+  ST.useLive = !ST.useLive
+  el.classList.toggle('on', ST.useLive)
+  if (!ST.useLive) { ST.flights = generateMock(); setCount(ST.flights.length, true); updateMarkers(); renderSidebar() }
+  else initData()
 }
 
-// ── Map controls ─────────────────────────────────────────────────────
-function zoomIn(){ map.zoomIn({duration:300}) }
-function zoomOut(){ map.zoomOut({duration:300}) }
-
-const styleKeys=['dark','satellite','terrain','minimal']
-function cycleMapStyle(){
-  const idx=styleKeys.indexOf(state.settings.mapStyle)
-  const next=styleKeys[(idx+1)%styleKeys.length]
-  state.settings.mapStyle=next
+function cycleStyle() {
+  const idx = STYLE_KEYS.indexOf(ST.settings.mapStyle)
+  const next = STYLE_KEYS[(idx+1) % STYLE_KEYS.length]
+  ST.settings.mapStyle = next
   map.setStyle(MAP_STYLES[next])
-  map.once('styledata',()=>updateMarkers())
-  showToast(`Map: ${next.charAt(0).toUpperCase()+next.slice(1)}`)
+  map.once('styledata', () => updateMarkers())
+  toast(`Map: ${next}`)
 }
 
-function toggleSidebar(){
-  state.sidebarOpen=!state.sidebarOpen
-  document.getElementById('sidebar').classList.toggle('hidden',!state.sidebarOpen)
-  document.getElementById('toggle-sidebar-btn').classList.toggle('active',state.sidebarOpen)
+function toggleSidebar() {
+  ST.sidebarOpen = !ST.sidebarOpen
+  document.getElementById('sidebar').classList.toggle('hidden', !ST.sidebarOpen)
+  document.getElementById('menu-btn').classList.toggle('active', ST.sidebarOpen)
 }
 
-// ── Boot ─────────────────────────────────────────────────────────────
+// ─── Boot ─────────────────────────────────────────────────────────────
 initMap()
-renderSidebar()
 </script>
 </body>
 </html>
